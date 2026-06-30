@@ -1,17 +1,20 @@
 import os
 import gradio as gr
 import helper
+import asyncio
+import chromadb
 
 from llama_index.readers.sec_filings import SECFilingsLoader
-from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader, Document
+from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader, Document, StorageContext
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.deepseek import DeepSeek
 from llama_index.core.readers.base import BaseReader
+from llama_index.vector_stores.chroma import ChromaVectorStore
 from liteparse import LiteParse
 from typing import Dict
-import asyncio
+
 
 class LiteParseReader(BaseReader):
     def load_data(self, file_path: str, extra_info=None):
@@ -26,14 +29,14 @@ class LiteParseReader(BaseReader):
 
 file_extractor: Dict[str, BaseReader] = {".pdf": LiteParseReader()}
 
-
-# 1. Initialize Models and Global Settings
-print("Initializing Models...")
+print("Initializing LLM and embed model...")
 embed_model = HuggingFaceEmbedding(model_name="codefuse-ai/F2LLM-v2-80M")
 llm = DeepSeek(model="deepseek-v4-flash", api_key=helper.get_deepseek_api_key())
 
+# Set globally 
 Settings.embed_model = embed_model
 Settings.llm = llm
+
 
 # 2. Data Ingestion
 print("Downloading SEC fillings...")
@@ -41,14 +44,27 @@ print("Downloading SEC fillings...")
 # loader.load_data()
 
 print("Loading documents into memory...")
-documents = SimpleDirectoryReader(
-    input_dir="data/2026",
-    file_extractor=file_extractor
-).load_data()
 
-# 3. Index and Query Engine Creation
+# DB management
+db = chromadb.PersistentClient(path="./chroma_db")
+chroma_collection = db.get_or_create_collection("Indexes")
+vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+
+if chroma_collection.count() == 0:
+    print("Chroma collection is empty, reading data directory for PDF")
+    documents = SimpleDirectoryReader(
+        input_dir="data/2026",
+        file_extractor=file_extractor
+        ).load_data()
+    index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
+else:
+    print("Chroma collection found, skipping reading data directory ")
+    index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context)
+
+
+# Build vector index
 print("Building Vector Index...")
-index = VectorStoreIndex.from_documents(documents)
 query_engine = index.as_query_engine(similarity_top_k=3)
 
 # 4. Tool Creation
