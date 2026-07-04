@@ -5,7 +5,7 @@ import asyncio
 import chromadb
 
 from llama_index.readers.sec_filings import SECFilingsLoader
-from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader, Document, StorageContext
+from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader, Document, StorageContext, SummaryIndex
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -14,12 +14,12 @@ from llama_index.core.readers.base import BaseReader
 from llama_index.vector_stores.chroma import ChromaVectorStore
 from liteparse import LiteParse
 from typing import Dict
+from utils import CustomDocs
 
 
 class LiteParseReader(BaseReader):
     def load_data(self, file_path: str, extra_info=None):
         parser = LiteParse(
-            num_workers=4,
             output_format="markdown"
         )
 
@@ -45,44 +45,13 @@ print("Downloading SEC fillings...")
 
 print("Loading documents into memory...")
 
-# DB management
-db = chromadb.PersistentClient(path="./chroma_db")
-chroma_collection = db.get_or_create_collection("Indexes")
-vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-storage_context = StorageContext.from_defaults(vector_store=vector_store)
+tesla = CustomDocs("Tesla", "data/2026","Tesla company",file_extractor)
 
-if chroma_collection.count() == 0:
-    print("Chroma collection is empty, reading data directory for PDF")
-    documents = SimpleDirectoryReader(
-        input_dir="data/2026",
-        file_extractor=file_extractor
-        ).load_data()
-    index = VectorStoreIndex.from_documents(documents, storage_context=storage_context)
-else:
-    print("Chroma collection found, skipping reading data directory ")
-    index = VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context)
-
-
-# Build vector index
-print("Building Vector Index...")
-query_engine = index.as_query_engine(similarity_top_k=3)
-
-# 4. Tool Creation
-tesla_tool = QueryEngineTool(
-    query_engine=query_engine,
-    metadata=ToolMetadata(
-        name="tesla_10k_filing",
-        description=(
-            "Provides information about Tesla's latest SEC 10-K filings "
-            "including risk, financial and company overview. "
-            "Use a detailed plain text question as input to the tool."
-        )
-    ),
-)
+tesla_tools = tesla.get_tools()
 
 # 5. Agent Initialization
 agent = ReActAgent(
-    tools=[tesla_tool], 
+    tools=tesla_tools, 
     llm=llm, 
     verbose=True
 )
