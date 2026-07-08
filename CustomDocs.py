@@ -1,0 +1,205 @@
+from llama_index.readers.sec_filings import SECFilingsLoader
+from llama_index.core import (
+    Settings,
+    VectorStoreIndex,
+    SimpleDirectoryReader,
+    Document,
+    StorageContext,
+    SummaryIndex,
+    load_index_from_storage,
+)
+from llama_index.core.tools import QueryEngineTool, ToolMetadata
+from llama_index.core.agent import ReActAgent
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.llms.deepseek import DeepSeek
+from llama_index.core.readers.base import BaseReader
+from llama_index.vector_stores.chroma import ChromaVectorStore
+from llama_index.core.indices.document_summary import DocumentSummaryIndex
+from liteparse import LiteParse
+from typing import Dict, List
+from chromadb.api.models.Collection import Collection
+from llama_index.core.vector_stores import (
+    MetadataFilters,
+    FilterCondition,
+    MetadataFilter,
+)
+import chromadb
+from pathlib import Path
+from llama_index.core.base.response.schema import RESPONSE_TYPE
+from llama_index.core.tools import FunctionTool
+from llama_index.core.tools.types import AsyncBaseTool
+
+
+# import logging
+# import sys
+# logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+# logging.getLogger().addHandler(logging.StreamHandler(stream=sys.stdout))
+
+
+class CustomDocs:
+    _v_collection: Collection
+    _s_collection: Collection
+    _v_collection_size: int
+    _s_collection_size: int
+    summ_idx: SummaryIndex
+    vec_idx: VectorStoreIndex
+    _persist_dir: str
+
+    def __init__(
+        self,
+        name: str,
+        path: str,
+        context_description: str,
+        file_extractor: Dict[str, BaseReader],
+    ) -> None:
+        if " " in name:
+            raise ValueError("The string must not contain spaces.")
+        else:
+            self.name = name
+
+        self._extractor = file_extractor
+        self.desc = context_description
+        (
+            self._v_collection,
+            self._v_collection_size,
+            self._s_collection,
+            self._s_collection_size,
+        ) = self._create_collection()
+        self.vec_idx, self.summ_idx = self._build_index(path)
+
+    def _create_collection(self):
+        db = chromadb.PersistentClient(path="./chroma_db")
+        v_chroma_collection = db.get_or_create_collection(
+            f"{self.name}_vector_collection"
+        )
+        s_chroma_collection = db.get_or_create_collection(
+            f"{self.name}_summ_collection"
+        )
+
+        if v_chroma_collection.count() > 0 and not self._collection_has_page_labels(
+            v_chroma_collection
+        ):
+            db.delete_collection(f"{self.name}_vector_collection")
+            db.delete_collection(f"{self.name}_summ_collection")
+            v_chroma_collection = db.get_or_create_collection(
+                f"{self.name}_vector_collection"
+            )
+            s_chroma_collection = db.get_or_create_collection(
+                f"{self.name}_summ_collection"
+            )
+
+        print(f"Creating collection for {self.name} done")
+
+        return (
+            v_chroma_collection,
+            v_chroma_collection.count(),
+            s_chroma_collection,
+            s_chroma_collection.count(),
+        )
+
+    def _collection_has_page_labels(self, collection: Collection) -> bool:
+        if collection.count() == 0:
+            return False
+
+        sample = collection.get(limit=1, include=["metadatas"])
+        metadatas = sample.get("metadatas") or []
+
+        return bool(metadatas and metadatas[0] and "page_label" in metadatas[0])
+
+    def _build_index(self, path):
+        print(f"Attempting to build index for {self.name}. Locating file...")
+        self._persist_dir = f"./storage/{self.name}"
+        dir = Path(self._persist_dir)
+        dir.mkdir(parents=True, exist_ok=True)
+
+        v_store = ChromaVectorStore(chroma_collection=self._v_collection)
+        v_storage_context = StorageContext.from_defaults(vector_store=v_store)
+
+        s_store = ChromaVectorStore(chroma_collection=self._s_collection)
+
+        if self._v_collection_size == 0:
+            print("Did not find file in collection, parsing it")
+            documents = SimpleDirectoryReader(
+                input_files=[path], file_extractor=self._extractor
+            ).load_data()
+            print("Finished parsing. Building index")
+
+            vec_idx = VectorStoreIndex.from_documents(
+                documents, storage_context=v_storage_context
+            )
+
+            s_storage_context = StorageContext.from_defaults(vector_store=s_store)
+            summ_idx = SummaryIndex.from_documents(
+                documents, storage_context=s_storage_context
+            )
+            summ_idx.storage_context.persist(persist_dir=self._persist_dir)
+        else:
+            print("Found file in collection, skipped parsing")
+            vec_idx = VectorStoreIndex.from_vector_store(
+                v_store, storage_context=v_storage_context
+            )
+
+            s_storage_context = StorageContext.from_defaults(
+                vector_store=s_store, persist_dir=self._persist_dir
+            )
+            loaded_idx = load_index_from_storage(s_storage_context)
+            summ_idx: SummaryIndex = loaded_idx  # type: ignore
+
+        print(f"Building index for {self.name} done")
+        return vec_idx, summ_idx
+
+    def get_indexes(self) -> tuple[VectorStoreIndex, SummaryIndex]:
+        return self.vec_idx, self.summ_idx
+
+    def _vector_query(self, query: str, pg_numbers: List[str]) -> RESPONSE_TYPE:
+        """Perform a vector search over an index
+
+        query(str): the string query to be embedded
+        pg_numbers (List[str]): Filter by a set of pages. Leave BLANK if we want to perform a vector search over all pages. Otherwise, filter by the set of specified pages
+
+        """
+
+        metadata_dict = [{"key": "page_label", "value": str(p)} for p in pg_numbers]
+
+        # meta_filters = [MetadataFilter.from_dict(filter_dict) for filter_dict in metadata_dict]
+
+        query_eng = self.vec_idx.as_query_engine(
+            similarity_top_k=2,
+            filters=MetadataFilters.from_dicts(
+                metadata_dict, condition=FilterCondition.OR
+            ),
+        )
+
+        response = query_eng.query(query)
+
+        return response
+
+    def get_tools(self) -> list[AsyncBaseTool]:
+        v_query_eng = self.vec_idx.as_query_engine(similarity_top_k=3)
+        s_query_eng = self.summ_idx.as_query_engine(response_mode="tree_summarize")
+
+        vector_tool = QueryEngineTool(
+            query_engine=v_query_eng,
+            metadata=ToolMetadata(
+                name=f"vector_tool_{self.name}",
+                description=(
+                    f"Useful to retrieve specific facts and details from {self.desc}."
+                ),
+            ),
+        )
+        summary_tool = QueryEngineTool(
+            query_engine=s_query_eng,
+            metadata=ToolMetadata(
+                name=f"summary_tool_{self.name}",
+                description=(
+                    f"Useful to summarize and get a high-level overview of {self.desc}."
+                ),
+            ),
+        )
+
+        # This is from L2 tool calling which uses metadataFiltering
+        vector_page_tool = FunctionTool.from_defaults(
+            name="Vector_search_by_page_tool", fn=self._vector_query
+        )
+
+        return [vector_tool, summary_tool, vector_page_tool]
