@@ -1,4 +1,3 @@
-from llama_index.readers.sec_filings import SECFilingsLoader
 from llama_index.core import (
     Settings,
     VectorStoreIndex,
@@ -9,20 +8,15 @@ from llama_index.core import (
     load_index_from_storage,
 )
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
-from llama_index.core.agent import ReActAgent
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.deepseek import DeepSeek
 from llama_index.core.readers.base import BaseReader
 from llama_index.vector_stores.chroma import ChromaVectorStore
-from llama_index.core.indices.document_summary import DocumentSummaryIndex
-from liteparse import LiteParse
 from typing import Dict, List
 from chromadb.api.models.Collection import Collection
 from llama_index.core.vector_stores import (
     MetadataFilters,
     FilterCondition,
-    MetadataFilter,
 )
+from llama_index.core.schema import BaseNode, TextNode
 import chromadb
 from pathlib import Path
 from llama_index.core.base.response.schema import RESPONSE_TYPE
@@ -98,6 +92,16 @@ class CustomDocs:
         )
 
     def _collection_has_page_labels(self, collection: Collection) -> bool:
+        """Returns True if the collection has page labels, False otherwise
+
+        Usecase: Page labels are used to filter the vector search by page number. If the collection does not have page labels, we need to delete the collection and create a new one with page labels.
+
+        Args:
+            collection (Collection): The chroma collection to check for page labels
+
+        Returns:
+            bool: True if the collection has page labels, False otherwise
+        """
         if collection.count() == 0:
             return False
 
@@ -106,7 +110,17 @@ class CustomDocs:
 
         return bool(metadatas and metadatas[0] and "page_label" in metadatas[0])
 
-    def _build_index(self, path):
+    def _build_index(self, path: str) -> tuple[VectorStoreIndex, SummaryIndex]:
+        """Attempts to build two indexes: a vector index and a summary index.
+        If the indexes already exist, it loads them from storage.
+        If not, it parses the documents and creates the indexes.
+
+        Args:
+            path (str): The path to the document to be indexed
+
+        Returns:
+            tuple[VectorStoreIndex, SummaryIndex]: A tuple containing the vector index and the summary index
+        """
         print(f"Attempting to build index for {self.name}. Locating file...")
         self._persist_dir = f"./storage/{self.name}"
         dir = Path(self._persist_dir)
@@ -145,7 +159,9 @@ class CustomDocs:
             loaded_idx = load_index_from_storage(s_storage_context)
             summ_idx: SummaryIndex = loaded_idx  # type: ignore
 
-        print(f"Building index for {self.name} done")
+        print(
+            f"Building index for {self.name} done, Vector size: {len(self._get_nodes_from_chroma(self._v_collection))}, Summary size: {len(summ_idx.docstore.docs)}"
+        )
         return vec_idx, summ_idx
 
     def get_indexes(self) -> tuple[VectorStoreIndex, SummaryIndex]:
@@ -203,3 +219,64 @@ class CustomDocs:
         )
 
         return [vector_tool, summary_tool, vector_page_tool]
+
+    def _get_nodes_from_chroma(self, collection: Collection) -> List[TextNode]:
+        """Returns a list of nodes from chroma
+
+        WHY: Getting a list of nodes index from chroma returns an empty list because the nodes are not stored in the index (docstore is empty), but rather in the chroma collection.
+        This function retrieves the nodes from the chroma collection and returns them as a list of BaseNode objects.
+
+        Args:
+            collection (Collection): The chroma collection to retrieve nodes from
+
+        Returns:
+            List[BaseNode]: List of nodes from the chroma collection
+        """
+        results = collection.get(include=["metadatas", "documents", "embeddings"])
+
+        if results["documents"] is None:
+            print(f"Collection {collection.name} is empty. No nodes to retrieve.")
+            return []
+
+        nodes = []
+
+        for i, doc_text in enumerate(results["documents"] or []):
+            node = TextNode(
+                text=doc_text,
+                metadata=results["metadatas"][i] if results["metadatas"] else None,
+                # Prevent error: (The truth value of an array with more than one element is ambiguous)
+                embedding=results["embeddings"][i]
+                if (
+                    results["embeddings"] is not None and len(results["embeddings"]) > 0
+                )
+                else None,
+            )
+            nodes.append(node)
+
+        return nodes
+
+    def get_vector_nodes(self) -> List[TextNode]:
+        """Returns a list of nodes from the vector index
+
+        Usecase: This is useful for evaluating the index and for generating question-context pairs for fine-tuning.
+
+        Returns:
+            List[BaseNode]: List of nodes from the vector index
+        """
+        nodes = self._get_nodes_from_chroma(self._v_collection)
+
+        # To ensure same id's per run, we manually set them
+        for idx, node in enumerate(nodes):
+            node.id_ = f"node_{idx}"
+
+        return nodes
+
+    def get_summary_nodes(self) -> List[BaseNode]:
+        """Returns a list of nodes from the summary index
+
+        Usecase: This is useful for evaluating the index and for generating question-context pairs for fine-tuning.
+
+        Returns:
+            List[BaseNode]: List of nodes from the summary index
+        """
+        return list(self.vec_idx.docstore.docs.values())
