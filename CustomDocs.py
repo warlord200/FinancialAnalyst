@@ -269,6 +269,8 @@ class CustomDocs:
         for idx, node in enumerate(nodes):
             node.id_ = f"node_{idx}"
 
+        self.vec_idx = VectorStoreIndex(nodes=nodes)
+
         return nodes
 
     def get_summary_nodes(self) -> List[BaseNode]:
