@@ -5,10 +5,7 @@ import helper
 from llama_index.core import (
     Settings,
     VectorStoreIndex,
-    # SimpleDirectoryReader,
     Document,
-    # StorageContext,
-    # SummaryIndex,
 )
 
 # from llama_index.core.tools import QueryEngineTool, ToolMetadata
@@ -23,6 +20,7 @@ from typing import Dict
 from CustomDocs import CustomDocs
 from FileReader import FileReader
 from llama_index.core.objects import ObjectIndex
+import torch
 
 
 class LiteParseReader(BaseReader):
@@ -48,7 +46,13 @@ class LiteParseReader(BaseReader):
 file_extractor: Dict[str, BaseReader] = {".pdf": LiteParseReader()}
 
 print("Initializing LLM and embed model...")
-embed_model = HuggingFaceEmbedding(model_name="codefuse-ai/F2LLM-v2-80M")
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {DEVICE}")
+embed_model = HuggingFaceEmbedding(
+    model_name="Octen/Octen-Embedding-4B-INT8",
+    device=str(DEVICE),
+)
 llm = DeepSeek(model="deepseek-v4-flash", api_key=helper.get_deepseek_api_key())
 
 # Set globally
