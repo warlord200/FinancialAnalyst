@@ -1,8 +1,6 @@
 from llama_index.core import (
-    Settings,
     VectorStoreIndex,
     SimpleDirectoryReader,
-    Document,
     StorageContext,
     SummaryIndex,
     load_index_from_storage,

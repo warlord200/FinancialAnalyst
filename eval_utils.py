@@ -1,13 +1,7 @@
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, ServiceContext
-from llama_index.core.node_parser import SimpleNodeParser
 from llama_index.core.evaluation import (
-    RetrieverEvaluator,
     RetrievalEvalResult,
 )
 from pathlib import Path
-from FileReader import FileReader
-from CustomDocs import CustomDocs
-import asyncio
 from typing import List, Dict, Tuple
 from llama_index.core.evaluation.retrieval.base import RetrievalEvalMode
 import pandas as pd
