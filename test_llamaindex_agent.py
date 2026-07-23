@@ -1,5 +1,3 @@
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, ServiceContext
-from llama_index.core.node_parser import SimpleNodeParser
 from llama_index.core.evaluation import (
     RetrieverEvaluator,
     BaseRetrievalEvaluator,
@@ -7,9 +5,7 @@ from llama_index.core.evaluation import (
 from pathlib import Path
 from FileReader import FileReader
 from CustomDocs import CustomDocs
-from app import llm, obj_retriever, file_extractor
-import asyncio
-from typing import List, Dict, Tuple
+from app import llm, file_extractor
 from eval_utils import (
     evaluate_dataset,
     display_results,
@@ -28,6 +24,8 @@ names_store_list = list_getter.get_storage_location(
 all_tools = []
 datasets = []
 
+# MRR is a measure of how well the model ranks the relevant documents. A higher MRR indicates that the model is better at ranking relevant documents higher in the list of retrieved documents.
+# Hit Rate is a measure of how many relevant documents are retrieved by the model. A higher hit rate indicates that the model is better at retrieving relevant documents, regardless of their rank in the list of retrieved documents.
 METRICS = ["mrr", "hit_rate"]
 
 for i, (company_name, company_file_dir) in enumerate(names_dir_list):
@@ -36,6 +34,8 @@ for i, (company_name, company_file_dir) in enumerate(names_dir_list):
     nodes = company.get_vector_nodes()
     f_path = names_store_list[i][1]  # Get the storage path for the dataset
 
+    # Larger k value = higher hit rate but lower MRR. Smaller k value = lower hit rate but higher MRR
+    # Reranking is not implemented because it is computationally expensive (im poor)
     retriever = company.vec_idx.as_retriever(similarity_top_k=2)
 
     print(f"Generating QA dataset for {company_name}...")
