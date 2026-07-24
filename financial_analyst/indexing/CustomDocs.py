@@ -1,26 +1,24 @@
+from pathlib import Path
+
+import chromadb
+from chromadb.api.models.Collection import Collection
 from llama_index.core import (
-    VectorStoreIndex,
     SimpleDirectoryReader,
     StorageContext,
     SummaryIndex,
+    VectorStoreIndex,
     load_index_from_storage,
 )
-from llama_index.core.tools import QueryEngineTool, ToolMetadata
-from llama_index.core.readers.base import BaseReader
-from llama_index.vector_stores.chroma import ChromaVectorStore
-from typing import Dict, List
-from chromadb.api.models.Collection import Collection
-from llama_index.core.vector_stores import (
-    MetadataFilters,
-    FilterCondition,
-)
-from llama_index.core.schema import BaseNode, TextNode
-import chromadb
-from pathlib import Path
 from llama_index.core.base.response.schema import RESPONSE_TYPE
-from llama_index.core.tools import FunctionTool
+from llama_index.core.readers.base import BaseReader
+from llama_index.core.schema import BaseNode, TextNode
+from llama_index.core.tools import FunctionTool, QueryEngineTool, ToolMetadata
 from llama_index.core.tools.types import AsyncBaseTool
-
+from llama_index.core.vector_stores import (
+    FilterCondition,
+    MetadataFilters,
+)
+from llama_index.vector_stores.chroma import ChromaVectorStore
 
 # import logging
 # import sys
@@ -42,7 +40,7 @@ class CustomDocs:
         name: str,
         path: str,
         context_description: str,
-        file_extractor: Dict[str, BaseReader],
+        file_extractor: dict[str, BaseReader],
     ) -> None:
         if " " in name:
             raise ValueError("The string must not contain spaces.")
@@ -165,7 +163,7 @@ class CustomDocs:
     def get_indexes(self) -> tuple[VectorStoreIndex, SummaryIndex]:
         return self.vec_idx, self.summ_idx
 
-    def _vector_query(self, query: str, pg_numbers: List[str]) -> RESPONSE_TYPE:
+    def _vector_query(self, query: str, pg_numbers: list[str]) -> RESPONSE_TYPE:
         """Perform a vector search over an index
 
         query(str): the string query to be embedded
@@ -218,7 +216,7 @@ class CustomDocs:
 
         return [vector_tool, summary_tool, vector_page_tool]
 
-    def _get_nodes_from_chroma(self, collection: Collection) -> List[TextNode]:
+    def _get_nodes_from_chroma(self, collection: Collection) -> list[TextNode]:
         """Returns a list of nodes from chroma
 
         WHY: Getting a list of nodes index from chroma returns an empty list because the nodes are not stored in the index (docstore is empty), but rather in the chroma collection.
@@ -253,7 +251,7 @@ class CustomDocs:
 
         return nodes
 
-    def get_vector_nodes(self) -> List[TextNode]:
+    def get_vector_nodes(self) -> list[TextNode]:
         """Returns a list of nodes from the vector index
 
         Usecase: This is useful for evaluating the index and for generating question-context pairs for fine-tuning.
@@ -271,7 +269,7 @@ class CustomDocs:
 
         return nodes
 
-    def get_summary_nodes(self) -> List[BaseNode]:
+    def get_summary_nodes(self) -> list[BaseNode]:
         """Returns a list of nodes from the summary index
 
         Usecase: This is useful for evaluating the index and for generating question-context pairs for fine-tuning.

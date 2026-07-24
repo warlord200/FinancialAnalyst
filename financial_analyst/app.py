@@ -1,59 +1,35 @@
 import gradio as gr
-import helper
+import torch
 
 # from llama_index.readers.sec_filings import SECFilingsLoader
 from llama_index.core import (
     Settings,
     VectorStoreIndex,
-    Document,
 )
 
 # from llama_index.core.tools import QueryEngineTool, ToolMetadata
 from llama_index.core.agent import ReActAgent
+from llama_index.core.objects import ObjectIndex
+from llama_index.core.readers.base import BaseReader
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.deepseek import DeepSeek
-from llama_index.core.readers.base import BaseReader
 
-# from llama_index.vector_stores.chroma import ChromaVectorStore
-from liteparse import LiteParse
-from typing import Dict
-from CustomDocs import CustomDocs
-from FileReader import FileReader
-from llama_index.core.objects import ObjectIndex
-import torch
+from financial_analyst.ingestion.file_reader import FileReader
+from financial_analyst import config
+from financial_analyst.indexing.CustomDocs import CustomDocs
+from financial_analyst.reader.lite_parse_reader import LiteParseReader
 
-
-class LiteParseReader(BaseReader):
-    def load_data(self, file_path: str, extra_info=None):
-        parser = LiteParse(output_format="markdown")
-
-        result = parser.parse(file_path)
-
-        base_info = extra_info or {}
-        documents = []
-
-        for page in result.pages:
-            page_info = {
-                **base_info,
-                "page_label": str(page.page_num),
-                "page_number": page.page_num,
-            }
-            documents.append(Document(text=page.text, extra_info=page_info))
-
-        return documents
-
-
-file_extractor: Dict[str, BaseReader] = {".pdf": LiteParseReader()}
+file_extractor: dict[str, BaseReader] = {".pdf": LiteParseReader()}
 
 print("Initializing LLM and embed model...")
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 print(f"Using device: {DEVICE}")
 embed_model = HuggingFaceEmbedding(
     model_name="Octen/Octen-Embedding-4B-INT8",
-    device=str(DEVICE),
+    device=DEVICE,
 )
-llm = DeepSeek(model="deepseek-v4-flash", api_key=helper.get_deepseek_api_key())
+llm = DeepSeek(model="deepseek-v4-flash", api_key=config.get_deepseek_api_key())
 
 # Set globally
 Settings.embed_model = embed_model

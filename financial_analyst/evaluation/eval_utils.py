@@ -1,19 +1,19 @@
+import json
+import re
+import uuid
+import warnings
+from pathlib import Path
+from typing import Self
+
+import pandas as pd
+from llama_index.core.bridge.pydantic import BaseModel
 from llama_index.core.evaluation import (
     RetrievalEvalResult,
 )
-from pathlib import Path
-from typing import List, Dict, Tuple
 from llama_index.core.evaluation.retrieval.base import RetrievalEvalMode
-import pandas as pd
-from llama_index.core.bridge.pydantic import BaseModel
-import json
+from llama_index.core.llms import LLM
 from llama_index.core.schema import MetadataMode, TextNode
 from tqdm import tqdm
-from llama_index.core.llms import LLM
-from typing import Self
-import warnings
-import re
-import uuid
 
 
 class EmbeddingQAFinetuneDataset(BaseModel):
@@ -27,13 +27,13 @@ class EmbeddingQAFinetuneDataset(BaseModel):
 
     """
 
-    queries: Dict[str, str]
-    corpus: Dict[str, str]
-    relevant_docs: Dict[str, List[str]]
+    queries: dict[str, str]
+    corpus: dict[str, str]
+    relevant_docs: dict[str, list[str]]
     mode: str = "text"
 
     @property
-    def query_docid_pairs(self) -> List[Tuple[str, List[str]]]:
+    def query_docid_pairs(self) -> list[tuple[str, list[str]]]:
         """Get query, relevant doc ids."""
         return [
             (query, self.relevant_docs[query_id])
@@ -93,7 +93,7 @@ def evaluate_dataset(
     self,
     dataset: EmbeddingQAFinetuneDataset,
     show_progress: bool = True,
-) -> List[RetrievalEvalResult]:
+) -> list[RetrievalEvalResult]:
     """Run synchronous evaluation with dataset."""
 
     response_jobs = []
@@ -116,7 +116,7 @@ def evaluate_dataset(
     return response_jobs
 
 
-def display_results(name, eval_results: List[RetrievalEvalResult], metrics: List[str]):
+def display_results(name, eval_results: list[RetrievalEvalResult], metrics: list[str]):
     """Display results from evaluate."""
 
     metric_dicts = []
@@ -137,7 +137,7 @@ def display_results(name, eval_results: List[RetrievalEvalResult], metrics: List
 
 
 def generate_qa_embedding_pairs(
-    nodes: List[TextNode],
+    nodes: list[TextNode],
     llm: LLM,
     qa_generate_prompt_tmpl: str = DEFAULT_QA_GENERATE_PROMPT_TMPL,
     num_questions_per_chunk: int = 1,
@@ -273,8 +273,8 @@ def clean_questions(raw_text: str, num_questions_per_chunk: int):
     for line in lines:
         line = re.sub(r"^\d+[\).\s-]*", "", line).strip()  # Remove 1. or 2) or 3.)
         line = re.sub(r"^-+\s*", "", line).strip()
-        line = re.sub(r"^\*\*Question:\*\*\s*", "", line, flags=re.I).strip()
-        line = re.sub(r"^Question:\s*", "", line, flags=re.I).strip()
+        line = re.sub(r"^\*\*Question:\*\*\s*", "", line, flags=re.IGNORECASE).strip()
+        line = re.sub(r"^Question:\s*", "", line, flags=re.IGNORECASE).strip()
 
         lower = line.lower()
         if any(re.search(p, lower) for p in BAD_PATTERNS):

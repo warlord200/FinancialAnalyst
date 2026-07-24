@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Tuple
 
 
 class FileReader:
@@ -15,7 +14,7 @@ class FileReader:
 
     def get_fnames_and_dir(
         self, verbose=False, inclu_file=True
-    ) -> List[Tuple[str, str]]:
+    ) -> list[tuple[str, str]]:
         """Returns a list fnames and its location
 
         Args:
@@ -47,8 +46,8 @@ class FileReader:
         new_file: str = "",
         storage_dir: str = "./storage",
         verbose=False,
-        valid_extensions: List[str] = [".pdf"],
-    ) -> List[Tuple[str, str]]:
+        valid_extensions: list[str] = [".pdf"],
+    ) -> list[tuple[str, str]]:
         """Build storage paths for source files that match allowed extensions.
 
         For each matching file under ``self.main_dir``, this method creates a
