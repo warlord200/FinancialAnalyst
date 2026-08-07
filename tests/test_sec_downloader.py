@@ -98,7 +98,7 @@ def test_download_10k_retries_on_rate_limit(tmp_path):
 
         def __call__(self, url, headers=None, timeout=None):
             self.calls += 1
-            if "Archives/edgar/data" in url and self.calls == 1:
+            if "Archives/edgar/data" in url and self.calls == 3:
                 return FakeResponse({}, status_code=429)
             if "company_tickers.json" in url:
                 return FakeResponse(COMPANY_TICKERS)
@@ -113,7 +113,12 @@ def test_download_10k_retries_on_rate_limit(tmp_path):
         filings = dl.download_10k("TSLA")
 
     assert len(filings) == 2
-    assert mock_get.call_count > 2  # rate-limited request was retried
+    archives_hits = sum(
+        1
+        for call in mock_get.call_args_list
+        if "Archives/edgar/data" in call.args[0]
+    )
+    assert archives_hits == 3  # 2 filings + 1 rate-limit retry
 
 
 def test_download_10k_raises_after_max_retries(tmp_path):
