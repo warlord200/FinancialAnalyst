@@ -37,9 +37,9 @@ Six components:
 
 ### 4.1 SEC Downloader
 `financial_analyst/ingestion/sec_downloader.py`
-- Given a ticker, queries SEC EDGAR company submissions API.
+- Given a ticker, queries the SEC EDGAR company submissions API to discover filings.
+- Retrieves filings via the `SECFilingsLoader` reader if installed (`llama_index.readers.sec_filings`); otherwise falls back to direct HTTPS downloads from EDGAR. This is decided once at implementation time and used consistently.
 - Finds the two most recent 10-K filings; downloads both PDFs to `data/<fiscal_year>/<TICKER>.pdf` (e.g., `data/2026/TSLA.pdf`, `data/2025/TSLA.pdf`).
-- Uses the existing `SECFilingsLoader`/EDGAR endpoint.
 - Respects EDGAR's 10 req/sec rate limit; sends a proper `User-Agent` header.
 - Retries up to 3 times with backoff on rate-limit / network failures.
 
