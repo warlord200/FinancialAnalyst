@@ -41,6 +41,9 @@ class CustomDocs:
         path: str,
         context_description: str,
         file_extractor: dict[str, BaseReader],
+        chroma_path: str = "./chroma_db",
+        storage_base: str = "./storage",
+        requires_page_labels: bool = True,
     ) -> None:
         if " " in name:
             raise ValueError("The string must not contain spaces.")
@@ -49,6 +52,9 @@ class CustomDocs:
 
         self._extractor = file_extractor
         self.desc = context_description
+        self._chroma_path = chroma_path
+        self._storage_base = storage_base
+        self._requires_page_labels = requires_page_labels
         (
             self._v_collection,
             self._v_collection_size,
@@ -58,7 +64,7 @@ class CustomDocs:
         self.vec_idx, self.summ_idx = self._build_index(path)
 
     def _create_collection(self):
-        db = chromadb.PersistentClient(path="./chroma_db")
+        db = chromadb.PersistentClient(path=self._chroma_path)
         v_chroma_collection = db.get_or_create_collection(
             f"{self.name}_vector_collection"
         )
@@ -66,8 +72,10 @@ class CustomDocs:
             f"{self.name}_summ_collection"
         )
 
-        if v_chroma_collection.count() > 0 and not self._collection_has_page_labels(
-            v_chroma_collection
+        if (
+            self._requires_page_labels
+            and v_chroma_collection.count() > 0
+            and not self._collection_has_page_labels(v_chroma_collection)
         ):
             db.delete_collection(f"{self.name}_vector_collection")
             db.delete_collection(f"{self.name}_summ_collection")
@@ -118,7 +126,7 @@ class CustomDocs:
             tuple[VectorStoreIndex, SummaryIndex]: A tuple containing the vector index and the summary index
         """
         print(f"Attempting to build index for {self.name}. Locating file...")
-        self._persist_dir = f"./storage/{self.name}"
+        self._persist_dir = f"{self._storage_base}/{self.name}"
         dir = Path(self._persist_dir)
         dir.mkdir(parents=True, exist_ok=True)
 
