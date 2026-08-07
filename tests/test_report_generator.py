@@ -85,3 +85,22 @@ def test_generate_handles_single_filing():
     report = rg.generate()
     assert report.fiscal_years == [2025]
     assert "prior year unavailable" in report.markdown.lower() or "2024" not in report.markdown
+
+
+def test_generate_section_order():
+    rg = ReportGenerator(
+        {2025: make_custom_docs({}), 2024: make_custom_docs({})}, FakeLLM(), "TSLA"
+    )
+    report = rg.generate()
+    headings = [
+        "# Executive Summary",
+        "# Business Overview",
+        "# Risk Factors",
+        "# MD&A",
+        "# Segment Performance",
+        "# YoY Trend Comparison",
+        "# Financial Health",
+        "# Data Provenance",
+    ]
+    indices = [report.markdown.index(h) for h in headings]
+    assert indices == sorted(indices)

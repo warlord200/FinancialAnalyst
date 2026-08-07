@@ -25,12 +25,13 @@ SECTION_QUERIES = {
         "Report revenue and profit for each operating segment for this fiscal year. "
         "If segments are not broken out, say so explicitly. Cite the SEC Item section."
     ),
-    "Financial Health": (
-        "Summarize the balance sheet and cash flow highlights: total assets, total liabilities, "
-        "cash and cash equivalents, total debt, working capital, operating cash flow. "
-        "Cite the SEC Item section, e.g. (Item 8)."
-    ),
 }
+
+FINANCIAL_HEALTH_QUERY = (
+    "Summarize the balance sheet and cash flow highlights: total assets, total liabilities, "
+    "cash and cash equivalents, total debt, working capital, operating cash flow. "
+    "Cite the SEC Item section, e.g. (Item 8)."
+)
 
 YO_Y_METRICS = ["Revenue", "Net Income", "EPS", "Operating Margin", "Net Margin", "Free Cash Flow"]
 
@@ -173,6 +174,9 @@ class ReportGenerator:
             body = self._section_from_filings(title, question)
             sections.append(f"# {title}\n\n{body}")
         sections.append(f"# YoY Trend Comparison\n\n{self._yoy_comparison()}")
+        sections.append(
+            f"# Financial Health\n\n{self._section_from_filings('Financial Health', FINANCIAL_HEALTH_QUERY)}"
+        )
         sections.append(f"# Data Provenance\n\n{self._provenance()}")
 
         return Report(
