@@ -37,11 +37,18 @@ Six components:
 
 ### 4.1 SEC Downloader
 `financial_analyst/ingestion/sec_downloader.py`
-- Given a ticker, queries the SEC EDGAR company submissions API to discover filings.
-- Retrieves filings via the `SECFilingsLoader` reader if installed (`llama_index.readers.sec_filings`); otherwise falls back to direct HTTPS downloads from EDGAR. This is decided once at implementation time and used consistently.
-- Finds the two most recent 10-K filings; downloads both PDFs to `data/<fiscal_year>/<TICKER>.pdf` (e.g., `data/2026/TSLA.pdf`, `data/2025/TSLA.pdf`).
+- Given a ticker, queries the SEC EDGAR company submissions API (`data.sec.gov/submissions/CIK<...>.json`, after resolving ticker → CIK via `files/company_tickers.json`) to discover filings.
+- **EDGAR serves 10-Ks as HTML, not PDFs** (verified live: primary document `tsla-20251231.htm`, no PDF in filing index). The downloader downloads the **primary document HTML** for the two most recent 10-Ks to `data/<fiscal_year>/<TICKER>.htm` (e.g., `data/2026/TSLA.htm`, `data/2025/TSLA.htm`). Fiscal year is derived from `reportDate` (e.g., `2025-12-31` → `2025`).
 - Respects EDGAR's 10 req/sec rate limit; sends a proper `User-Agent` header.
 - Retries up to 3 times with backoff on rate-limit / network failures.
+- The bundled `SECFilingsLoader` is **not used**: it requires the `unstructured` library (absent) and its section parser is unusable here.
+
+### 4.1b SEC HTML Reader
+`financial_analyst/reader/sec_html_reader.py` (a LlamaIndex `BaseReader`)
+- Parses a downloaded `.htm` primary document (e.g., `tsla-20251231.htm`) — not LiteParse, which only accepts PDFs.
+- Strips HTML tags (lxml is already installed) and splits the text by **SEC Item headings** (Item 1, 1A, 1B, 7, 8, …) using a regex like `(?i)item \d{1,3}(?:[a-z]|\([a-z]\))?`.
+- Produces one `Document` per Item section, with metadata `{ticker, fiscal_year, item}`.
+- This means report citations reference **Item sections** (e.g., "Item 1A") rather than page numbers.
 
 ### 4.2 Cache Registry
 `financial_analyst/storage/registry.py`
@@ -51,14 +58,15 @@ Six components:
 
 ### 4.3 Per-ticker index
 - Reuses `CustomDocs` with light parameterization: collection and company name = ticker (e.g., `TSLA_vector_collection`, storage at `storage/TSLA`).
-- Loads from ChromaDB if already built; otherwise parses via `LiteParseReader`.
+- **`CustomDocs` must accept a per-ticker file extractor** that maps `.htm → SECHtmlReader` (instead of only `.pdf → LiteParseReader`), and its page-label check must tolerate documents without `page_label` metadata.
+- Loads from ChromaDB if already built; otherwise parses the downloaded `.htm` via `SECHtmlReader`.
 - Both the vector index (facts/details) and summary index (high-level overview) are used.
 
 ### 4.4 Report Generator
 `financial_analyst/analysis/report_generator.py`
 - Runs a fixed set of query templates per filing year against the vector + summary indexes.
 - Assembles a structured Markdown report.
-- Asks the LLM to cite `page_label` values so citations appear inline as `(p. 24)`.
+- Asks the LLM to cite the **Item section** it drew from (metadata `item`, e.g., "Item 1A"), so citations appear inline like `(Item 1A)`. (EDGAR HTML has no page numbers; section-level citations are more meaningful for 10-Ks.)
 - Computes the verdict label + score.
 
 ### 4.5 FastAPI backend
@@ -113,10 +121,11 @@ CORS enabled for the dev frontend origin. Backend: `uvicorn`; frontend: `npm run
 ## 9. Testing
 
 - **Unit tests:**
-  - SEC downloader — mocked EDGAR: valid ticker, invalid ticker, missing second filing, rate-limit retry.
+  - SEC downloader — mocked EDGAR responses (requests patched): valid ticker, invalid ticker, missing second filing, rate-limit retry.
+  - SEC HTML reader — fixture `.htm` with Item headings; asserts one Document per Item with `{ticker, fiscal_year, item}` metadata and no HTML tags.
   - Cache registry — add/get/clear, persistence round-trip, same-ticker locking.
   - Report generator — mocked index nodes; each section populated; verdict label + score present.
-- **Integration test** (`tests/test_analyze_flow.py`): end-to-end with a small synthetic fixture PDF (2 filings) through download→index→report→registry; cached repeat call skips re-indexing.
+- **Integration test** (`tests/test_analyze_flow.py`): end-to-end with a small synthetic fixture `.htm` (2 filings) through download→index→report→registry; cached repeat call skips re-indexing.
 - **API tests:** FastAPI `TestClient` with mocked services — cached vs completed, report shape, tickers list, 404 path.
 - **Manual:** analyze a real ticker (e.g., TSLA) once; confirm second call is instant and report renders with verdict + YoY table.
 
@@ -124,6 +133,6 @@ Conventions: pytest (existing). Tests that hit DeepSeek/chromadb use lightweight
 
 ## 10. Tech Stack (confirmed)
 
-- **Backend:** FastAPI, uvicorn, existing LlamaIndex RAG stack (LiteParse, ChromaDB, DeepSeek, `Octen/Octen-Embedding-4B-INT8` embed model)
+- **Backend:** FastAPI, uvicorn, existing LlamaIndex RAG stack (LiteParse for existing PDFs, **custom `SECHtmlReader` for downloaded 10-Ks**, ChromaDB, DeepSeek, `Octen/Octen-Embedding-4B-INT8` embed model)
 - **Frontend:** Vite + React, react-markdown for report rendering
-- **Data:** SEC EDGAR (free), `data/` for raw PDFs, `storage/` for indexes + reports, `chroma_db/` for vectors
+- **Data:** SEC EDGAR (free), `data/` for raw downloaded `.htm` files, `storage/` for indexes + reports, `chroma_db/` for vectors
