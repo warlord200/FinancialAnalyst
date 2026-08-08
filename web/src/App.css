@@ -1,0 +1,30 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: light dark;
+}
+body { margin: 0; background: #f5f5f7; color: #1d1d1f; }
+.app { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.header h1 { margin: 0 0 4px; }
+.search { display: flex; gap: 8px; margin: 16px 0; }
+.ticker-input { font-size: 1.1rem; padding: 10px 12px; width: 220px; }
+button.primary { font-size: 1.1rem; padding: 10px 18px; }
+.status { display: flex; align-items: center; gap: 10px; padding: 12px; background: #e8f0fe; border-radius: 8px; }
+.spinner {
+  width: 18px; height: 18px; border: 3px solid #ccc; border-top-color: #333;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-banner { padding: 12px; background: #fdecea; color: #b00020; border-radius: 8px; }
+.layout { display: grid; grid-template-columns: 1fr 260px; gap: 24px; margin-top: 16px; }
+.content { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.sidebar { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: fit-content; }
+.sidebar ul { list-style: none; padding: 0; }
+.sidebar li { margin: 6px 0; }
+.history-link { background: none; border: none; color: #0a66c2; cursor: pointer; font-size: 1rem; text-align: left; }
+.report-meta { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.verdict { padding: 6px 12px; border-radius: 999px; font-weight: 700; }
+.verdict-bullish { background: #e6f4ea; color: #137333; }
+.verdict-neutral { background: #fef7e0; color: #b06000; }
+.verdict-bearish { background: #fce8e6; color: #c5221f; }
+.meta-text { color: #5f6368; }
+@media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }

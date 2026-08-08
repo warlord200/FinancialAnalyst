@@ -3,3 +3,6 @@
 __pycache__/
 chroma_db/
 /storage/
+node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
