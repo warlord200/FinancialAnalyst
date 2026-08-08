@@ -19,7 +19,7 @@ A **Retrieval-Augmented Generation (RAG)** pipeline built with [LlamaIndex](http
 
 ## KNOWLEDGE
 
-This project was my deep-dive into building a production-ready RAG system. Beyond connecting an LLM to documents, I ran into several non-trivial problems around parsing, storage, metadata, evaluation correctness, and metric reliability. Each section below documents a real issue encountered and how it was resolved. This project also represents my current coding capabilities due to my minimized use of AI to solve problems (It is only used for code documentations).
+This project was my deep-dive into building a production-ready RAG system. Beyond connecting an LLM to documents, I ran into several non-trivial problems around parsing, storage, metadata, evaluation correctness, and metric reliability. Each section below documents a real issue encountered and how it was resolved. This project also represents my current coding capabilities due to my minimized use of AI to solve problems (The RAG pipeline is implemented by hand while AI is used to generate the frontend/API).
 
 ---
 
@@ -77,6 +77,7 @@ doc.metadata["page_label"] = str(page_number)
 ```python
 # eval_utils.py , monkey patching missing evaluate_dataset
 import llama_index.core.evaluation as _eval
+
 _eval.evaluate_dataset = custom_evaluate_dataset
 ```
 
@@ -94,8 +95,8 @@ _eval.evaluate_dataset = custom_evaluate_dataset
 
 ```python
 qa_dataset = generate_qa_embedding_pairs(
-    nodes=my_defined_nodes,   # ← must not be random/default
-    llm=llm
+    nodes=my_defined_nodes,  # ← must not be random/default
+    llm=llm,
 )
 ```
 
