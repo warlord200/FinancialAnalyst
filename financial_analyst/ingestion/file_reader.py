@@ -46,7 +46,7 @@ class FileReader:
         new_file: str = "",
         storage_dir: str = "./storage",
         verbose=False,
-        valid_extensions: list[str] = [".pdf"],
+        valid_extensions: list[str] | None = None,
     ) -> list[tuple[str, str]]:
         """Build storage paths for source files that match allowed extensions.
 
@@ -69,6 +69,8 @@ class FileReader:
             List[Tuple[str, str]]: Tuples of ``(source_file_stem, storage_path)`` for
             each matching source file.
         """
+        if valid_extensions is None:
+            valid_extensions = [".pdf"]
         files = []
         new_storage_dir = Path(storage_dir)
         for path in self.main_dir.rglob("*"):

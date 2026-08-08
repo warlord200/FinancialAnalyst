@@ -14,9 +14,9 @@ from llama_index.core.readers.base import BaseReader
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.deepseek import DeepSeek
 
-from financial_analyst.ingestion.file_reader import FileReader
 from financial_analyst import config
 from financial_analyst.indexing.CustomDocs import CustomDocs
+from financial_analyst.ingestion.file_reader import FileReader
 from financial_analyst.reader.lite_parse_reader import LiteParseReader
 
 file_extractor: dict[str, BaseReader] = {".pdf": LiteParseReader()}
