@@ -1,4 +1,4 @@
-# 📊 FinancialAnalyst , RAG Project
+# FinancialAnalyst , RAG Project
 
 A **Retrieval-Augmented Generation (RAG)** pipeline built with [LlamaIndex](https://github.com/run-llama/llama_index) that enables an LLM agent to intelligently query and analyse financial documents. The agent supports both **vector search** and **summary-based retrieval**, with page-level metadata filtering and evaluated performance metrics.
 
@@ -31,8 +31,6 @@ This project was my deep-dive into building a production-ready RAG system. Beyon
 
 **Solution:** Replaced `SimpleDirectoryReader` with a dedicated parser. [LlamaParse](https://github.com/run-llama/llama_parse) was the natural candidate but it is a paid service. Instead, **[LiteParse](https://github.com/iamarunbrahma/litparse)** was chosen , it is open-source, fast, and produced clean structured output that the tool layer could parse without errors.
 
-> **Key takeaway:** Don't assume the default reader is always the right choice. For agentic tool use, the structure and cleanliness of parsed output matters as much as content.
-
 ---
 
 ### P2 , `SummaryIndex` Cannot Be Persisted to ChromaDB
@@ -48,8 +46,6 @@ This project was my deep-dive into building a production-ready RAG system. Beyon
 storage_context_summary = StorageContext.from_defaults(persist_dir="./storage_summary")
 ```
 
-> **Key takeaway:** Know your storage backend's constraints. ChromaDB = vectors only.
-
 ---
 
 ### P3 , Metadata Filtering by Page Does Not Work
@@ -63,8 +59,6 @@ storage_context_summary = StorageContext.from_defaults(persist_dir="./storage_su
 ```python
 doc.metadata["page_label"] = str(page_number)
 ```
-
-> **Key takeaway:** Always verify what metadata your nodes carry before relying on filters.
 
 ---
 
@@ -80,8 +74,6 @@ import llama_index.core.evaluation as _eval
 
 _eval.evaluate_dataset = custom_evaluate_dataset
 ```
-
-> **Key takeaway:** Pin your dependency versions. Be prepared to patch deprecated or missing functionality when working with rapidly evolving libraries.
 
 ---
 
@@ -99,8 +91,6 @@ qa_dataset = generate_qa_embedding_pairs(
     llm=llm,
 )
 ```
-
-> **Key takeaway:** Evaluation pipelines depend on node identity consistency. Randomised node initialisation silently breaks the entire eval loop.
 
 ---
 
