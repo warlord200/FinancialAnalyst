@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 
 import torch
 from llama_index.core import Settings
@@ -22,14 +23,20 @@ _llm = None
 NUM_10K = 3
 NUM_10Q = 4
 
+DEFAULT_EMBED_MODEL = "BAAI/bge-m3"
+HIGH_QUALITY_EMBED_MODEL = "Octen/Octen-Embedding-4B-INT8"
+
 
 def _ensure_models():
     global _embed_model, _llm
     if _embed_model is None:
         device = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        model_name = os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
+        batch_size = int(os.getenv("EMBED_BATCH_SIZE", "32"))
         _embed_model = HuggingFaceEmbedding(
-            model_name="Octen/Octen-Embedding-4B-INT8",
+            model_name=model_name,
             device=device,
+            embed_batch_size=batch_size,
         )
         Settings.embed_model = _embed_model
     if _llm is None:
