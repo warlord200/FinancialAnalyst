@@ -56,35 +56,19 @@ class SECDownloader:
         raise TickerNotFoundError(f"Ticker not found on SEC EDGAR: {ticker}")
 
     def _get_recent_10k_filings(self, cik: int, num: int) -> list[dict]:
-        data = self._get(SUBMISSIONS_URL.format(cik=cik)).json()
-        recent = data["filings"]["recent"]
-        filings = []
-        for i in range(len(recent["form"])):
-            if recent["form"][i] != "10-K":
-                continue
-            fiscal_year = int(recent["reportDate"][i][:4])
-            accession = recent["accessionNumber"][i]
-            filings.append(
-                {
-                    "fiscal_year": fiscal_year,
-                    "filing_date": recent["filingDate"][i],
-                    "accession_number": accession,
-                    "primary_document": recent["primaryDocument"][i],
-                    "accession_no_dashes": accession.replace("-", ""),
-                }
-            )
-            if len(filings) >= num:
-                break
-        return filings
+        return self._get_recent_filings(cik, num_10k=num, num_10q=0)
 
-    def _download_primary_doc(self, cik: int, filing: dict, ticker: str) -> str:
+    def _save_primary_doc(self, cik: int, filing: dict, out_name: str) -> str:
         url = f"{ARCHIVES_BASE_URL.format(cik=cik, accession_no_dashes=filing['accession_no_dashes'])}/{filing['primary_document']}"
         resp = self._get(url)
         out_dir = self.data_dir / str(filing["fiscal_year"])
         out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"{ticker.upper()}.htm"
+        path = out_dir / out_name
         path.write_text(resp.text, encoding="utf-8")
         return str(path)
+
+    def _download_primary_doc(self, cik: int, filing: dict, ticker: str) -> str:
+        return self._save_primary_doc(cik, filing, f"{ticker.upper()}.htm")
 
     def download_10k(self, ticker: str, num_filings: int = 2) -> list[dict]:
         cik = self._get_cik(ticker)
@@ -96,6 +80,71 @@ class SECDownloader:
             path = self._download_primary_doc(cik, filing, ticker)
             results.append(
                 {
+                    "fiscal_year": filing["fiscal_year"],
+                    "filing_date": filing["filing_date"],
+                    "path": path,
+                }
+            )
+        return results
+
+    def validate_ticker(self, ticker: str) -> bool:
+        try:
+            self._get_cik(ticker)
+            return True
+        except TickerNotFoundError:
+            return False
+
+    def _get_recent_filings(
+        self, cik: int, num_10k: int = 3, num_10q: int = 4
+    ) -> list[dict]:
+        data = self._get(SUBMISSIONS_URL.format(cik=cik)).json()
+        recent = data["filings"]["recent"]
+        counts = {"10-K": 0, "10-Q": 0}
+        targets = {"10-K": num_10k, "10-Q": num_10q}
+        filings = []
+        for i in range(len(recent["form"])):
+            form = recent["form"][i]
+            if form not in targets:
+                continue
+            if counts[form] >= targets[form]:
+                continue
+            counts[form] += 1
+            accession = recent["accessionNumber"][i]
+            filings.append(
+                {
+                    "form": form,
+                    "fiscal_year": int(recent["reportDate"][i][:4]),
+                    "filing_date": recent["filingDate"][i],
+                    "accession_number": accession,
+                    "primary_document": recent["primaryDocument"][i],
+                    "accession_no_dashes": accession.replace("-", ""),
+                }
+            )
+            if all(counts[f] >= targets[f] for f in targets):
+                break
+        return filings
+
+    def _download_doc(self, cik: int, filing: dict, out_name: str) -> str:
+        return self._save_primary_doc(cik, filing, out_name)
+
+    def download_filings(
+        self, ticker: str, num_10k: int = 3, num_10q: int = 4
+    ) -> list[dict]:
+        cik = self._get_cik(ticker)
+        filings = self._get_recent_filings(cik, num_10k, num_10q)
+        if not filings:
+            raise TickerNotFoundError(f"No filings found for {ticker}")
+        results = []
+        for filing in filings:
+            suffix = Path(filing["primary_document"]).suffix or ".htm"
+            name = (
+                f"{ticker.upper()}_{filing['form'].replace('-', '')}"
+                f"_{filing['fiscal_year']}_{filing['filing_date']}{suffix}"
+            )
+            path = self._download_doc(cik, filing, name)
+            results.append(
+                {
+                    "form": filing["form"],
                     "fiscal_year": filing["fiscal_year"],
                     "filing_date": filing["filing_date"],
                     "path": path,

@@ -43,3 +43,19 @@ def test_load_data_skips_empty_sections():
     docs = reader.load_data(str(fixture), extra_info={"ticker": "TSLA", "fiscal_year": 2025})
     for d in docs:
         assert d.text.strip()
+
+
+def test_load_data_handles_xml_declaration(tmp_path):
+    fixture = tmp_path / "2025" / "TSLA.htm"
+    fixture.parent.mkdir()
+    fixture.write_text(
+        "<?xml version='1.0' encoding='ASCII'?>\n"
+        "<html><body><h2>Item 7.</h2><p>Revenue grew strongly.</p></body></html>",
+        encoding="utf-8",
+    )
+    reader = SECHtmlReader()
+    docs = reader.load_data(str(fixture), extra_info={"ticker": "TSLA", "fiscal_year": 2025})
+
+    assert len(docs) == 1
+    assert docs[0].metadata["item"] == "ITEM 7"
+    assert "Revenue grew" in docs[0].text

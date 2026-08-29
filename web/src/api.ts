@@ -1,21 +1,35 @@
-export interface Verdict {
-  label: "bullish" | "neutral" | "bearish";
-  score: number;
-  rationale: string;
+export type IngestJobStatus = "queued" | "running" | "completed" | "failed";
+
+export interface IngestStats {
+  ticker: string;
+  ingested_at: string;
+  num_chunks: number;
+  chunks_by_item: Record<string, number>;
+  chunks_by_year: Record<string, number>;
+  fiscal_years: number[];
 }
 
-export interface ReportData {
+export interface IngestJob {
+  id: string;
   ticker: string;
-  fiscal_years: number[];
-  generated_at: string;
-  verdict: Verdict;
-  markdown: string;
+  status: IngestJobStatus;
+  progress: number;
+  result?: IngestStats | null;
+  error?: string | null;
 }
 
-export interface TickerInfo {
+export interface IngestResponse {
+  status: "submitted" | "cached";
   ticker: string;
-  fiscal_years: number[];
-  report_generated_at?: string;
+  job_id?: string;
+  ingested_at?: string;
+}
+
+export interface IngestedTicker {
+  ticker: string;
+  ingested_at?: string;
+  num_chunks?: number;
+  fiscal_years?: number[];
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
@@ -29,24 +43,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return resp.json() as Promise<T>;
 }
 
-export function analyzeTicker(ticker: string) {
-  return request<{ status: string; report_path: string }>(
-    `/api/analyze/${ticker}`,
-    { method: "POST" }
-  );
+export function ingestTicker(ticker: string) {
+  return request<IngestResponse>(`/api/ingest/${ticker}`, { method: "POST" });
 }
 
-export function reanalyzeTicker(ticker: string) {
-  return request<{ status: string; report_path: string }>(
-    `/api/reanalyze/${ticker}`,
-    { method: "POST" }
-  );
+export function getIngestJob(jobId: string) {
+  return request<IngestJob>(`/api/ingest/jobs/${jobId}`);
 }
 
-export function getReport(ticker: string) {
-  return request<ReportData>(`/api/report/${ticker}`);
+export function listIngested() {
+  return request<IngestedTicker[]>("/api/ingest");
 }
 
-export function listTickers() {
-  return request<TickerInfo[]>("/api/tickers");
+export function getIngestStats(ticker: string) {
+  return request<IngestStats>(`/api/ingest/${ticker}/stats`);
 }
