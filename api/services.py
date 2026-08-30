@@ -11,12 +11,16 @@ from financial_analyst.analysis.analyzer import Analyzer
 from financial_analyst.indexing.company_index import CompanyIndex
 from financial_analyst.ingestion.sec_downloader import SECDownloader, TickerNotFoundError
 from financial_analyst.jobs import JobRunner, JobStore, ThreadJobRunner
+from financial_analyst.numbers.prices import PriceStore, YahooFinancePriceClient
+from financial_analyst.numbers.service import NumbersService, NumbersStore
+from financial_analyst.numbers.xbrl import fetch_company_facts
 from financial_analyst.reader.chunker import chunk_documents
 from financial_analyst.reader.sec_html_reader import SECHtmlReader
 from financial_analyst.storage.registry import CacheRegistry
 
 _analyzer: Analyzer | None = None
 _ingest_service: "IngestService | None" = None
+_numbers_service: "NumbersService | None" = None
 _embed_model = None
 _llm = None
 
@@ -177,3 +181,18 @@ def get_ingest_service() -> IngestService:
         num_10q=NUM_10Q,
     )
     return _ingest_service
+
+
+def get_numbers_service() -> NumbersService:
+    global _numbers_service
+    if _numbers_service is not None:
+        return _numbers_service
+    downloader = SECDownloader(data_dir="./data")
+    _numbers_service = NumbersService(
+        downloader=downloader,
+        facts_fetcher=fetch_company_facts,
+        price_client=YahooFinancePriceClient(),
+        store=NumbersStore("./storage/numbers.json"),
+        price_store=PriceStore("./storage/prices.json"),
+    )
+    return _numbers_service

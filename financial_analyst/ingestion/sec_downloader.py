@@ -48,7 +48,7 @@ class SECDownloader:
                 time.sleep(2**attempt)
         raise SECDownloadError(f"Failed to fetch {url} after {self.max_retries} attempts: {last_exc}")
 
-    def _get_cik(self, ticker: str) -> int:
+    def get_cik(self, ticker: str) -> int:
         data = self._get(COMPANY_TICKERS_URL).json()
         for entry in data.values():
             if entry["ticker"] == ticker.upper():
@@ -71,7 +71,7 @@ class SECDownloader:
         return self._save_primary_doc(cik, filing, f"{ticker.upper()}.htm")
 
     def download_10k(self, ticker: str, num_filings: int = 2) -> list[dict]:
-        cik = self._get_cik(ticker)
+        cik = self.get_cik(ticker)
         filings = self._get_recent_10k_filings(cik, num_filings)
         if not filings:
             raise TickerNotFoundError(f"No 10-K filings found for {ticker}")
@@ -89,7 +89,7 @@ class SECDownloader:
 
     def validate_ticker(self, ticker: str) -> bool:
         try:
-            self._get_cik(ticker)
+            self.get_cik(ticker)
             return True
         except TickerNotFoundError:
             return False
@@ -130,7 +130,7 @@ class SECDownloader:
     def download_filings(
         self, ticker: str, num_10k: int = 3, num_10q: int = 4
     ) -> list[dict]:
-        cik = self._get_cik(ticker)
+        cik = self.get_cik(ticker)
         filings = self._get_recent_filings(cik, num_10k, num_10q)
         if not filings:
             raise TickerNotFoundError(f"No filings found for {ticker}")

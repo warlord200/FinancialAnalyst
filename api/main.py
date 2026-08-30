@@ -1,11 +1,17 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from api import services
 from financial_analyst.ingestion.sec_downloader import (
     SECDownloadError,
     TickerNotFoundError,
 )
+from financial_analyst.numbers.xbrl import XBRLEdgarError
+
+
+class PriceOverride(BaseModel):
+    price: float
 
 
 def create_app() -> FastAPI:
@@ -72,11 +78,45 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Not ingested: {ticker}")
         return stats
 
+    @app.post("/api/numbers/{ticker}/refresh")
+    def refresh_numbers(ticker: str):
+        ticker = ticker.upper()
+        try:
+            return _get_numbers_service().refresh(ticker)
+        except TickerNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except XBRLEdgarError:
+            raise HTTPException(status_code=503, detail="SEC EDGAR unavailable, try again later")
+
+    @app.get("/api/numbers/{ticker}")
+    def get_numbers(ticker: str):
+        ticker = ticker.upper()
+        numbers = _get_numbers_service().get(ticker)
+        if numbers is None:
+            raise HTTPException(
+                status_code=404, detail=f"No numbers found for {ticker}; refresh first"
+            )
+        return numbers
+
+    @app.put("/api/numbers/{ticker}/price")
+    def set_price_override(ticker: str, override: PriceOverride):
+        ticker = ticker.upper()
+        return _get_numbers_service().set_price_override(ticker, override.price)
+
+    @app.delete("/api/numbers/{ticker}/price")
+    def clear_price_override(ticker: str):
+        ticker = ticker.upper()
+        return _get_numbers_service().clear_price_override(ticker)
+
     return app
 
 
 def _get_ingest_service():
     return services.get_ingest_service()
+
+
+def _get_numbers_service():
+    return services.get_numbers_service()
 
 
 def _get_analyzer():

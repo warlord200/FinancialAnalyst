@@ -32,6 +32,33 @@ export interface IngestedTicker {
   fiscal_years?: number[];
 }
 
+export interface Financials {
+  fiscal_years: number[];
+  income_statement: Record<string, Record<string, number>>;
+  balance_sheet: Record<string, Record<string, number>>;
+  cash_flow: Record<string, Record<string, number>>;
+  common_size: {
+    income_statement: Record<string, Record<string, number>>;
+    balance_sheet: Record<string, Record<string, number>>;
+  };
+  ratios: Record<string, Record<string, number>>;
+  cagr: Record<string, Record<string, number>>;
+}
+
+export interface PriceInfo {
+  effective: { price: number; source: string; as_of: string };
+  fetched: { price: number; as_of: string };
+  override: { price: number; set_at: string } | null;
+  history: { date: string; close: number }[];
+}
+
+export interface NumbersResponse {
+  ticker: string;
+  refreshed_at: string;
+  financials: Financials;
+  price: PriceInfo | null;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -57,4 +84,28 @@ export function listIngested() {
 
 export function getIngestStats(ticker: string) {
   return request<IngestStats>(`/api/ingest/${ticker}/stats`);
+}
+
+export function refreshNumbers(ticker: string) {
+  return request<NumbersResponse>(`/api/numbers/${ticker}/refresh`, {
+    method: "POST",
+  });
+}
+
+export function getNumbers(ticker: string) {
+  return request<NumbersResponse>(`/api/numbers/${ticker}`);
+}
+
+export function setPriceOverride(ticker: string, price: number) {
+  return request<NumbersResponse>(`/api/numbers/${ticker}/price`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ price }),
+  });
+}
+
+export function clearPriceOverride(ticker: string) {
+  return request<NumbersResponse>(`/api/numbers/${ticker}/price`, {
+    method: "DELETE",
+  });
 }
