@@ -14,6 +14,7 @@ from financial_analyst.jobs import InlineJobRunner, JobStore
 from financial_analyst.reader.chunker import chunk_documents
 from financial_analyst.reader.sec_html_reader import SECHtmlReader
 from financial_analyst.storage.registry import CacheRegistry
+from tests.auth_helpers import GENEROUS_LIMITS, build_client, signup_and_auth
 
 FIXTURE_HTML = """<?xml version='1.0' encoding='ASCII'?>
 <html><body>
@@ -72,7 +73,8 @@ def make_client(tmp_path, monkeypatch, filings_by_ticker):
         chunker=chunk_documents,
     )
     monkeypatch.setattr(main, "_get_ingest_service", lambda: service)
-    client = TestClient(main.create_app())
+    client, _, _ = build_client(tmp_path, monkeypatch, limits=GENEROUS_LIMITS)
+    signup_and_auth(client, email="ingest@example.com")
     return client, service
 
 

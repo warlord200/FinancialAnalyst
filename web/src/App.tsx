@@ -3,15 +3,24 @@ import {
   clearPriceOverride,
   getIngestJob,
   getIngestStats,
+  getMe,
   getNumbers,
+  getQuota,
+  getToken,
   ingestTicker,
   listIngested,
+  login,
+  logout,
   refreshNumbers,
   setPriceOverride,
+  setToken,
+  signup,
+  AuthUser,
   IngestJob,
   IngestedTicker,
   IngestStats,
   NumbersResponse,
+  QuotaStatus,
 } from "./api";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
@@ -191,6 +200,81 @@ function PriceCard({
   );
 }
 
+function AuthPanel({
+  onAuthenticated,
+}: {
+  onAuthenticated: (user: AuthUser) => void;
+}) {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (!email || !password) {
+      setError("Enter an email and password.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const res = mode === "login" ? await login(email, password) : await signup(email, password);
+      setToken(res.token);
+      onAuthenticated(res.user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Authentication failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="auth-panel">
+      <h2>{mode === "login" ? "Log in" : "Create an account"}</h2>
+      <p className="meta-text">
+        {mode === "signup"
+          ? "Accounts work immediately. Unverified accounts get stricter daily quotas."
+          : "Log in to analyze tickers and track your daily quota."}
+      </p>
+      <div className="auth-form">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="you@example.com"
+          autoComplete="email"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Password (min 8 characters)"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+        />
+        <button onClick={submit} disabled={busy} className="primary">
+          {busy ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
+        </button>
+      </div>
+      {error && <div className="error-banner">{error}</div>}
+      <p className="meta-text">
+        {mode === "login" ? "No account yet? " : "Already have an account? "}
+        <button
+          className="link-button"
+          onClick={() => {
+            setMode(mode === "login" ? "signup" : "login");
+            setError("");
+          }}
+        >
+          {mode === "login" ? "Sign up" : "Log in"}
+        </button>
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>("ingest");
   const [ticker, setTicker] = useState("");
@@ -204,6 +288,41 @@ export default function App() {
   const [numbersTicker, setNumbersTicker] = useState("");
   const [numbersError, setNumbersError] = useState("");
   const [numbersLoading, setNumbersLoading] = useState(false);
+
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [quota, setQuota] = useState<QuotaStatus | null>(null);
+
+  const loadQuota = useCallback(() => {
+    getQuota()
+      .then(setQuota)
+      .catch(() => setQuota(null));
+  }, []);
+
+  useEffect(() => {
+    if (!getToken()) return;
+    getMe()
+      .then((u) => {
+        setUser(u);
+        loadQuota();
+      })
+      .catch(() => setToken(null));
+  }, [loadQuota]);
+
+  async function handleAuthenticated(u: AuthUser) {
+    setUser(u);
+    loadQuota();
+  }
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // token is discarded client-side regardless
+    }
+    setToken(null);
+    setUser(null);
+    setQuota(null);
+  }
 
   const refreshHistory = useCallback(() => {
     listIngested()
@@ -287,19 +406,38 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
-        <h1>Financial Analyst</h1>
-        <nav className="tabs">
-          <button className={view === "ingest" ? "tab active" : "tab"} onClick={() => setView("ingest")}>
-            Ingest
-          </button>
-          <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
-            Financials
-          </button>
-        </nav>
-      </header>
+      {!user ? (
+        <AuthPanel onAuthenticated={handleAuthenticated} />
+      ) : (
+        <>
+          <header className="header">
+            <h1>Financial Analyst</h1>
+            <div className="user-bar">
+              <span className="meta-text">
+                {user.email}
+                {user.verified ? " · verified" : " · unverified"}
+              </span>
+              {quota && (
+                <span className="meta-text">
+                  analyses {quota.analyses.used}/{quota.analyses.limit} · chat{" "}
+                  {quota.chat.used}/{quota.chat.limit}
+                </span>
+              )}
+              <button onClick={handleLogout} className="link-button">
+                Log out
+              </button>
+            </div>
+            <nav className="tabs">
+              <button className={view === "ingest" ? "tab active" : "tab"} onClick={() => setView("ingest")}>
+                Ingest
+              </button>
+              <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
+                Financials
+              </button>
+            </nav>
+          </header>
 
-      {view === "ingest" ? (
+          {view === "ingest" ? (
         <>
           <div className="search">
             <input
@@ -430,6 +568,8 @@ export default function App() {
             )}
           </main>
         </div>
+      )}
+        </>
       )}
     </div>
   );

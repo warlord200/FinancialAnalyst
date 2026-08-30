@@ -1,8 +1,17 @@
-from fastapi import FastAPI, HTTPException
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from api import services
+from financial_analyst.auth.quota import RESOURCE_ANALYSES, QuotaExceededError
+from financial_analyst.auth.users import (
+    InvalidCredentialsError,
+    InvalidEmailError,
+    UserAlreadyExistsError,
+    WeakPasswordError,
+)
 from financial_analyst.ingestion.sec_downloader import (
     SECDownloadError,
     TickerNotFoundError,
@@ -12,6 +21,34 @@ from financial_analyst.numbers.xbrl import XBRLEdgarError
 
 class PriceOverride(BaseModel):
     price: float
+
+
+class AuthRequest(BaseModel):
+    email: str
+    password: str
+
+
+def get_current_user(request: Request) -> dict:
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user = _get_auth_service().authenticate_token(token)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
+
+
+def require_quota(resource: str):
+    def dependency(user: dict = Depends(get_current_user)) -> dict:
+        try:
+            return _get_quota_service().consume(user, resource)
+        except QuotaExceededError as exc:
+            raise HTTPException(status_code=429, detail=str(exc))
+
+    return dependency
+
+
+CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 
 def create_app() -> FastAPI:
@@ -49,14 +86,52 @@ def create_app() -> FastAPI:
     def health():
         return {"status": "ok"}
 
+    @app.post("/api/auth/signup")
+    def signup(body: AuthRequest):
+        try:
+            return _get_auth_service().signup(body.email, body.password)
+        except UserAlreadyExistsError:
+            raise HTTPException(
+                status_code=400, detail="An account with that email already exists."
+            )
+        except InvalidEmailError:
+            raise HTTPException(status_code=400, detail="Enter a valid email address.")
+        except WeakPasswordError:
+            raise HTTPException(
+                status_code=400, detail="Password must be at least 8 characters."
+            )
+
+    @app.post("/api/auth/login")
+    def login(body: AuthRequest):
+        try:
+            return _get_auth_service().login(body.email, body.password)
+        except InvalidCredentialsError:
+            raise HTTPException(status_code=401, detail="Incorrect email or password.")
+
+    @app.post("/api/auth/logout")
+    def logout(request: Request, user: CurrentUser):
+        _, _, token = request.headers.get("Authorization", "").partition(" ")
+        _get_auth_service().revoke_token(token)
+        return {"status": "ok"}
+
+    @app.get("/api/auth/me")
+    def me(user: CurrentUser):
+        return user
+
+    @app.get("/api/auth/quota")
+    def quota(user: CurrentUser):
+        return _get_quota_service().status(user)
+
     @app.post("/api/ingest/{ticker}")
-    def ingest(ticker: str):
+    def ingest(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):
         ticker = ticker.upper()
         try:
             return _get_ingest_service().ingest(ticker)
         except TickerNotFoundError as exc:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
             raise HTTPException(status_code=404, detail=str(exc))
         except SECDownloadError:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
             raise HTTPException(status_code=503, detail="SEC EDGAR unavailable, try again later")
 
     @app.get("/api/ingest/jobs/{job_id}")
@@ -79,13 +154,15 @@ def create_app() -> FastAPI:
         return stats
 
     @app.post("/api/numbers/{ticker}/refresh")
-    def refresh_numbers(ticker: str):
+    def refresh_numbers(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):
         ticker = ticker.upper()
         try:
             return _get_numbers_service().refresh(ticker)
         except TickerNotFoundError as exc:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
             raise HTTPException(status_code=404, detail=str(exc))
         except XBRLEdgarError:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
             raise HTTPException(status_code=503, detail="SEC EDGAR unavailable, try again later")
 
     @app.get("/api/numbers/{ticker}")
@@ -121,6 +198,14 @@ def _get_numbers_service():
 
 def _get_analyzer():
     return services.get_analyzer()
+
+
+def _get_auth_service():
+    return services.get_auth_service()
+
+
+def _get_quota_service():
+    return services.get_quota_service()
 
 
 app = create_app()

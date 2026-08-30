@@ -8,6 +8,10 @@ from llama_index.llms.deepseek import DeepSeek
 
 from financial_analyst import config
 from financial_analyst.analysis.analyzer import Analyzer
+from financial_analyst.auth.quota import QuotaService, QuotaStore
+from financial_analyst.auth.sessions import RevokedTokenStore
+from financial_analyst.auth.tokens import load_or_create_secret
+from financial_analyst.auth.users import AuthService, UserStore
 from financial_analyst.indexing.company_index import CompanyIndex
 from financial_analyst.ingestion.sec_downloader import SECDownloader, TickerNotFoundError
 from financial_analyst.jobs import JobRunner, JobStore, ThreadJobRunner
@@ -21,6 +25,8 @@ from financial_analyst.storage.registry import CacheRegistry
 _analyzer: Analyzer | None = None
 _ingest_service: "IngestService | None" = None
 _numbers_service: "NumbersService | None" = None
+_auth_service: "AuthService | None" = None
+_quota_service: "QuotaService | None" = None
 _embed_model = None
 _llm = None
 
@@ -196,3 +202,25 @@ def get_numbers_service() -> NumbersService:
         price_store=PriceStore("./storage/prices.json"),
     )
     return _numbers_service
+
+
+def get_auth_service() -> AuthService:
+    global _auth_service
+    if _auth_service is not None:
+        return _auth_service
+    _auth_service = AuthService(
+        user_store=UserStore("./storage/auth.db"),
+        secret=load_or_create_secret("./storage/auth_secret.key"),
+        revoked_store=RevokedTokenStore("./storage/auth.db"),
+    )
+    return _auth_service
+
+
+def get_quota_service() -> QuotaService:
+    global _quota_service
+    if _quota_service is not None:
+        return _quota_service
+    _quota_service = QuotaService(
+        store=QuotaStore("./storage/quota.db"),
+    )
+    return _quota_service

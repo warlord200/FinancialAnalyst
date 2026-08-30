@@ -59,15 +59,85 @@ export interface NumbersResponse {
   price: PriceInfo | null;
 }
 
+export interface AuthUser {
+  email: string;
+  verified: boolean;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
+export interface QuotaState {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface QuotaStatus {
+  analyses: QuotaState;
+  chat: QuotaState;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+const TOKEN_KEY = "fa_token";
+
+export function setToken(token: string | null) {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, init);
+  const headers: Record<string, string> = {
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const resp = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!resp.ok) {
     const detail = await resp.text();
     throw new Error(detail || `Request failed: ${resp.status}`);
   }
   return resp.json() as Promise<T>;
+}
+
+export function signup(email: string, password: string) {
+  return request<AuthResponse>("/api/auth/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function login(email: string, password: string) {
+  return request<AuthResponse>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function logout() {
+  return request<{ status: string }>("/api/auth/logout", { method: "POST" });
+}
+
+export function getMe() {
+  return request<AuthUser>("/api/auth/me");
+}
+
+export function getQuota() {
+  return request<QuotaStatus>("/api/auth/quota");
 }
 
 export function ingestTicker(ticker: string) {

@@ -6,6 +6,7 @@ from financial_analyst.ingestion.sec_downloader import TickerNotFoundError
 from financial_analyst.numbers.prices import PriceFetchError, PriceStore
 from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.numbers.statements import compute
+from tests.auth_helpers import GENEROUS_LIMITS, build_client, signup_and_auth
 from tests.fixtures.xbrl_facts import make_facts
 
 YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
@@ -84,7 +85,8 @@ def make_client(tmp_path, monkeypatch, ciks=None, facts=None, price_client=None)
         price_store=PriceStore(str(tmp_path / "storage" / "prices.json")),
     )
     monkeypatch.setattr(main, "_get_numbers_service", lambda: service)
-    client = TestClient(main.create_app())
+    client, _, _ = build_client(tmp_path, monkeypatch, limits=GENEROUS_LIMITS)
+    signup_and_auth(client, email="numbers@example.com")
     return client, service
 
 
