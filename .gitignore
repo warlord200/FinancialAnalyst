@@ -7,3 +7,11 @@ node_modules/
 web/dist/
 web/tsconfig.tsbuildinfo
 data/**/*.htm
+GLOSSARY.md
+MISSION.md
+NOTES.md
+RESOURCES.md
+learning-records/
+lessons/
+reference/
+assets/
