@@ -173,6 +173,28 @@ def create_app() -> FastAPI:
             )
         return result
 
+    @app.get("/api/steps/{ticker}/financials")
+    def get_financials(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        try:
+            result = _get_steps_service().financials(user["email"], ticker)
+        except ArtifactValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not produce a grounded draft: {exc}",
+            )
+        except EmbedModelMismatchError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers or corpus for {ticker}; refresh numbers and ingest first.",
+            )
+        return result
+
     @app.post("/api/ingest/{ticker}")
     def ingest(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):
         ticker = ticker.upper()

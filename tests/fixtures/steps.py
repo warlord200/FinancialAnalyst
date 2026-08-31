@@ -27,11 +27,32 @@ ITEM_1A_TEXT = (
     "Regulatory changes could increase our costs."
 )
 
+ITEM_7_TEXT = (
+    "Management believes non-GAAP earnings better reflect operating performance. "
+    "We adjust for stock-based compensation and restructuring charges. "
+    "Related-party transactions during the period were immaterial. "
+    "Executive compensation is described in our proxy statement. "
+    "We face risks from supply chain disruptions."
+)
+
+ITEM_8_TEXT = (
+    "The financial statements were prepared in accordance with GAAP. "
+    "Notes to the financial statements disclose related-party balances. "
+    "Our non-GAAP measures are reconciled to GAAP in the MD&A."
+)
+
 
 def make_corpus(year=2025, ticker="TSLA"):
     return [
         SourceChunk(text=ITEM_1_TEXT, item="ITEM 1", fiscal_year=year, ticker=ticker, filing="10-K"),
         SourceChunk(text=ITEM_1A_TEXT, item="ITEM 1A", fiscal_year=year, ticker=ticker, filing="10-K"),
+    ]
+
+
+def make_financials_corpus(year=2025, ticker="TSLA"):
+    return [
+        SourceChunk(text=ITEM_7_TEXT, item="ITEM 7", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_8_TEXT, item="ITEM 8", fiscal_year=year, ticker=ticker, filing="10-K"),
     ]
 
 
@@ -44,6 +65,13 @@ def valid_section_json(content=ITEM_1_TEXT.split(". ")[0] + ".", evidence=None, 
             if evidence is not None
             else [ITEM_1_TEXT.split(". ")[0] + "."],
         }
+    )
+
+
+def valid_financials_section_json():
+    return valid_section_json(
+        content=ITEM_7_TEXT.split(". ")[0] + ".",
+        evidence=[ITEM_7_TEXT.split(". ")[0] + "."],
     )
 
 

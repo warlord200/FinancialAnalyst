@@ -9,6 +9,8 @@ instant and stable.
 
 from financial_analyst.steps import STEP_ONE
 from financial_analyst.steps.business_swot import ARTIFACT_TYPE, build_business_swot
+from financial_analyst.steps.financials import ARTIFACT_TYPE as FINANCIALS_TYPE
+from financial_analyst.steps.financials import build_financials
 from financial_analyst.steps.generation import NoSourceError
 from financial_analyst.steps.one_pager import build_one_pager
 
@@ -67,4 +69,27 @@ class StepsService:
             return None
         if self.drafts is not None:
             self.drafts.set_draft(ticker, ARTIFACT_TYPE, artifact.model_dump())
+        return {"ticker": ticker, "artifact": artifact, "cached": False}
+
+    def financials(self, email: str, ticker: str) -> dict | None:
+        """Generate (or serve from cache) the Step 3 Financials artifact.
+
+        Returns None when the ticker has no numbers or no indexed corpus, so
+        the caller can 404. The tables come from the numbers layer; the
+        forensic note is drafted over Item 7/8. The email is unused for now
+        because the draft is shared.
+        """
+        ticker = ticker.upper()
+        cached = self.drafts.get_draft(ticker, FINANCIALS_TYPE) if self.drafts else None
+        if cached is not None:
+            return {"ticker": ticker, "artifact": cached, "cached": True}
+        numbers = self.numbers.get(ticker)
+        if numbers is None or self.generator is None:
+            return None
+        try:
+            artifact = build_financials(self.generator, ticker, numbers["financials"])
+        except NoSourceError:
+            return None
+        if self.drafts is not None:
+            self.drafts.set_draft(ticker, FINANCIALS_TYPE, artifact.model_dump())
         return {"ticker": ticker, "artifact": artifact, "cached": False}

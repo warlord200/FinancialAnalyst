@@ -140,7 +140,7 @@ export interface ArtifactScope {
   fiscal_year: number | null;
 }
 
-export interface BusinessSwotArtifact {
+export interface Artifact {
   ticker: string;
   artifact_type: string;
   fiscal_year: number | null;
@@ -151,7 +151,34 @@ export interface BusinessSwotArtifact {
 
 export interface BusinessSwotResponse {
   ticker: string;
-  artifact: BusinessSwotArtifact;
+  artifact: Artifact;
+  cached: boolean;
+}
+
+export type TableUnit = "percent" | "ratio";
+
+export interface TableRow {
+  label: string;
+  values: Record<string, number | null>;
+  sources: SourceTag[];
+}
+
+export interface FinancialTable {
+  key: string;
+  title: string;
+  columns: string[];
+  rows: TableRow[];
+  unit: TableUnit;
+  column_labels?: Record<string, string>;
+}
+
+export interface FinancialsArtifact extends Artifact {
+  tables: FinancialTable[];
+}
+
+export interface FinancialsResponse {
+  ticker: string;
+  artifact: FinancialsArtifact;
   cached: boolean;
 }
 
@@ -228,6 +255,10 @@ export function setStepGate(ticker: string, decision: "accept" | "reject") {
 
 export function getBusinessSwot(ticker: string) {
   return request<BusinessSwotResponse>(`/api/steps/${ticker}/business-swot`);
+}
+
+export function getFinancials(ticker: string) {
+  return request<FinancialsResponse>(`/api/steps/${ticker}/financials`);
 }
 
 export function ingestTicker(ticker: string) {

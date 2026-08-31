@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   clearPriceOverride,
   getBusinessSwot,
+  getFinancials,
   getIngestJob,
   getIngestStats,
   getMe,
@@ -21,6 +22,8 @@ import {
   AuthUser,
   BusinessSwotResponse,
   ArtifactSection as ArtifactSectionData,
+  FinancialsResponse,
+  FinancialTable,
   IngestJob,
   IngestedTicker,
   IngestStats,
@@ -28,6 +31,7 @@ import {
   OnePagerResponse,
   QuotaStatus,
   SourceTag,
+  TableUnit,
 } from "./api";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
@@ -358,6 +362,79 @@ function BusinessSwotCard({ response }: { response: BusinessSwotResponse }) {
   );
 }
 
+function formatTableValue(value: number | null, unit: TableUnit) {
+  if (value === null) return "—";
+  if (unit === "percent") return formatPercent(value);
+  return value.toFixed(2);
+}
+
+function FinancialsTableCard({ table }: { table: FinancialTable }) {
+  if (table.rows.length === 0) return null;
+  const citedFacts = table.rows.flatMap((row) =>
+    row.sources.map((tag) => ({ label: row.label, tag }))
+  );
+  return (
+    <section className="matrix-block">
+      <h2>{table.title}</h2>
+      <table className="matrix">
+        <thead>
+          <tr>
+            <th className="row-label">Line</th>
+            {table.columns.map((column) => (
+              <th key={column}>{table.column_labels?.[column] ?? column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row) => (
+            <tr key={row.label}>
+              <td className="row-label">{row.label}</td>
+              {table.columns.map((column) => (
+                <td key={column}>{formatTableValue(row.values[column] ?? null, table.unit)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {citedFacts.length > 0 && (
+        <details className="evidence-block">
+          <summary>XBRL facts cited</summary>
+          <ul>
+            {citedFacts.map(({ label, tag }, i) => (
+              <li key={i}>
+                {label}: {tag.value}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function FinancialsCard({ response }: { response: FinancialsResponse }) {
+  const { artifact, cached } = response;
+  return (
+    <article>
+      <div className="report-meta">
+        <span className="meta-text">
+          Step 3 · Financials · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
+          {artifact.scope.items.join(", ")}
+        </span>
+        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+      </div>
+      {artifact.tables.map((table) => (
+        <FinancialsTableCard key={table.key} table={table} />
+      ))}
+      <h2 className="swot-heading">Forensic note</h2>
+      {artifact.sections.map((section) => (
+        <ArtifactSectionCard key={section.key} section={section} />
+      ))}
+    </article>
+  );
+}
+
 function AuthPanel({
   onAuthenticated,
 }: {
@@ -456,6 +533,11 @@ export default function App() {
   const [businessTicker, setBusinessTicker] = useState("");
   const [businessError, setBusinessError] = useState("");
   const [businessLoading, setBusinessLoading] = useState(false);
+
+  const [financials, setFinancials] = useState<FinancialsResponse | null>(null);
+  const [financialsTicker, setFinancialsTicker] = useState("");
+  const [financialsError, setFinancialsError] = useState("");
+  const [financialsLoading, setFinancialsLoading] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -576,6 +658,15 @@ export default function App() {
   const byItemRows = stats ? Object.entries(stats.chunks_by_item).sort() : [];
   const byYearRows = stats ? Object.entries(stats.chunks_by_year).sort() : [];
 
+  async function ensureNumbers(symbol: string) {
+    try {
+      await getNumbers(symbol);
+    } catch {
+      await refreshNumbers(symbol);
+      loadQuota();
+    }
+  }
+
   async function loadOnePager(symbol: string) {
     const s = symbol.trim().toUpperCase();
     if (!s) return;
@@ -583,12 +674,7 @@ export default function App() {
     setOnePagerLoading(true);
     setOnePagerError("");
     try {
-      try {
-        await getNumbers(s);
-      } catch {
-        await refreshNumbers(s);
-        loadQuota();
-      }
+      await ensureNumbers(s);
       setOnePager(await getOnePager(s));
     } catch (e) {
       setOnePagerError(e instanceof Error ? e.message : "Failed to load one-pager");
@@ -620,6 +706,22 @@ export default function App() {
       setBusinessError(e instanceof Error ? e.message : "Failed to load business & SWOT");
     } finally {
       setBusinessLoading(false);
+    }
+  }
+
+  async function loadFinancials(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setFinancialsTicker(s);
+    setFinancialsLoading(true);
+    setFinancialsError("");
+    try {
+      await ensureNumbers(s);
+      setFinancials(await getFinancials(s));
+    } catch (e) {
+      setFinancialsError(e instanceof Error ? e.message : "Failed to load financials");
+    } finally {
+      setFinancialsLoading(false);
     }
   }
 
@@ -770,6 +872,30 @@ export default function App() {
             {businessLoading && <div className="status">Drafting Business & SWOT…</div>}
             {businessError && <div className="error-banner">{businessError}</div>}
             {business && <BusinessSwotCard response={business} />}
+          </main>
+        </div>
+      ) : view === "step3" ? (
+        <div className="layout">
+          <main className="content">
+            <div className="search">
+              <input
+                value={financialsTicker}
+                onChange={(e) => setFinancialsTicker(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadFinancials(financialsTicker)}
+                placeholder="e.g. TSLA"
+                className="ticker-input"
+              />
+              <button
+                onClick={() => loadFinancials(financialsTicker)}
+                disabled={financialsLoading}
+                className="primary"
+              >
+                Load
+              </button>
+            </div>
+            {financialsLoading && <div className="status">Drafting Financials…</div>}
+            {financialsError && <div className="error-banner">{financialsError}</div>}
+            {financials && <FinancialsCard response={financials} />}
           </main>
         </div>
       ) : view === "numbers" ? (
