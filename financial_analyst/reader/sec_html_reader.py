@@ -86,14 +86,13 @@ class SECHtmlReader(BaseReader):
             has_later_duplicate = label_total[item] - seen[item] > 0
             if has_later_duplicate and len(body) < TOC_TINY:
                 continue
+            meta = {**extra_info, "item": item}
+            meta.setdefault("ticker", ticker)
+            meta.setdefault("fiscal_year", fiscal_year)
             documents.append(
                 Document(
                     text=body,
-                    extra_info={
-                        "ticker": ticker,
-                        "fiscal_year": fiscal_year,
-                        "item": item,
-                    },
+                    extra_info=meta,
                 )
             )
         return documents

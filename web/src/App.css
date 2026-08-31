@@ -50,3 +50,24 @@ button.primary { font-size: 1.1rem; padding: 10px 18px; }
 .gate-actions { display: flex; gap: 10px; margin-top: 8px; }
 button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; color: #b00020; border: 1px solid #f5c6c0; border-radius: 8px; cursor: pointer; }
 @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }
+
+.artifact-section { margin: 20px 0; }
+.artifact-section h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.artifact-content { margin: 0 0 8px; line-height: 1.5; white-space: pre-wrap; }
+.source-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-tag {
+  padding: 2px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+  background: #e8f0fe; color: #0a66c2;
+}
+.source-tag.source-filing { background: #fef7e0; color: #b06000; }
+.source-tag.source-xbrl_fact { background: #fce8e6; color: #c5221f; }
+.evidence-block { margin-top: 8px; color: #5f6368; font-size: 0.9rem; }
+.evidence-block ul { padding-left: 18px; }
+.swot-heading { margin: 28px 0 4px; }
+.swot-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;
+}
+.swot-cell {
+  background: #f7f8fa; border-radius: 10px; padding: 4px 14px; border: 1px solid #e8e8ed;
+}
+@media (max-width: 800px) { .swot-grid { grid-template-columns: 1fr; } }

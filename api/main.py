@@ -18,6 +18,7 @@ from financial_analyst.ingestion.sec_downloader import (
 )
 from financial_analyst.numbers.xbrl import XBRLEdgarError
 from financial_analyst.steps import STEP_ONE
+from financial_analyst.steps.generation import ArtifactValidationError
 
 
 class PriceOverride(BaseModel):
@@ -146,6 +147,23 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=404,
                 detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.get("/api/steps/{ticker}/business-swot")
+    def get_business_swot(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        try:
+            result = _get_steps_service().business_swot(user["email"], ticker)
+        except ArtifactValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not produce a grounded draft: {exc}",
+            )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No corpus for {ticker}; ingest first.",
             )
         return result
 

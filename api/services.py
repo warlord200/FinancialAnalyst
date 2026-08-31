@@ -20,6 +20,9 @@ from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.numbers.xbrl import fetch_company_facts
 from financial_analyst.reader.chunker import chunk_documents
 from financial_analyst.reader.sec_html_reader import SECHtmlReader
+from financial_analyst.steps.drafts import DraftStore
+from financial_analyst.steps.generation import ArtifactGenerator
+from financial_analyst.steps.retrieval import ScopedRetriever
 from financial_analyst.steps.service import StepsService
 from financial_analyst.steps.state import StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
@@ -134,6 +137,7 @@ class IngestService:
                 extra_info={
                     "ticker": ticker,
                     "fiscal_year": filing["fiscal_year"],
+                    "filing": filing["form"],
                 },
             )
             nodes.extend(self.chunker(docs))
@@ -233,8 +237,15 @@ def get_steps_service() -> StepsService:
     global _steps_service
     if _steps_service is not None:
         return _steps_service
+    _ensure_models()
+    retriever = ScopedRetriever(
+        CompanyIndex(chroma_path="./chroma_db", storage_base="./storage")
+    )
+    generator = ArtifactGenerator(retriever, Settings.llm)
     _steps_service = StepsService(
         numbers_service=get_numbers_service(),
         state_store=StepStateStore("./storage/steps.db"),
+        generator=generator,
+        draft_store=DraftStore("./storage/drafts.json"),
     )
     return _steps_service

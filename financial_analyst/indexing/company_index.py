@@ -19,6 +19,9 @@ class CompanyIndex:
     def collection_name(self, ticker: str) -> str:
         return f"{ticker.upper()}_vector_collection"
 
+    def collection(self, ticker: str):
+        return self._client().get_collection(self.collection_name(ticker))
+
     def build(self, ticker: str, nodes: list[TextNode]) -> int:
         db = self._client()
         name = self.collection_name(ticker)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   clearPriceOverride,
+  getBusinessSwot,
   getIngestJob,
   getIngestStats,
   getMe,
@@ -18,16 +19,28 @@ import {
   setToken,
   signup,
   AuthUser,
+  BusinessSwotResponse,
+  ArtifactSection as ArtifactSectionData,
   IngestJob,
   IngestedTicker,
   IngestStats,
   NumbersResponse,
   OnePagerResponse,
   QuotaStatus,
+  SourceTag,
 } from "./api";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
-type View = "ingest" | "numbers" | "step1";
+type View = "ingest" | "step1" | "step2" | "step3" | "step4" | "step5" | "step6" | "numbers";
+
+const DOSSIER_STEPS = [
+  { n: 1, label: "One-pager", view: "step1" as View },
+  { n: 2, label: "Business & SWOT", view: "step2" as View },
+  { n: 3, label: "Financials", view: "step3" as View },
+  { n: 4, label: "Strategy", view: "step4" as View },
+  { n: 5, label: "Valuation", view: "step5" as View },
+  { n: 6, label: "Thesis", view: "step6" as View },
+];
 
 function ChunkTable({ title, rows }: { title: string; rows: [string, number][] }) {
   return (
@@ -285,6 +298,66 @@ function OnePagerCard({
   );
 }
 
+function sourceTagLabel(tag: SourceTag) {
+  if (tag.type === "fiscal_year") return `FY${tag.value}`;
+  return tag.value;
+}
+
+function ArtifactSectionCard({ section }: { section: ArtifactSectionData }) {
+  return (
+    <section className="artifact-section">
+      <h2>{section.heading}</h2>
+      <p className="artifact-content">{section.content}</p>
+      <div className="source-tags">
+        {section.sources.map((tag, i) => (
+          <span key={i} className={`source-tag source-${tag.type}`}>
+            {sourceTagLabel(tag)}
+          </span>
+        ))}
+      </div>
+      {section.evidence.length > 0 && (
+        <details className="evidence-block">
+          <summary>Source quotes</summary>
+          <ul>
+            {section.evidence.map((quote, i) => (
+              <li key={i}>"{quote}"</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function BusinessSwotCard({ response }: { response: BusinessSwotResponse }) {
+  const { artifact, cached } = response;
+  const factSections = artifact.sections.filter((s) => !s.key.startsWith("swot_"));
+  const swotSections = artifact.sections.filter((s) => s.key.startsWith("swot_"));
+  return (
+    <article>
+      <div className="report-meta">
+        <span className="meta-text">
+          Step 2 · Business & SWOT · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
+          {artifact.scope.items.join(", ")}
+        </span>
+        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+      </div>
+      {factSections.map((section) => (
+        <ArtifactSectionCard key={section.key} section={section} />
+      ))}
+      <h2 className="swot-heading">SWOT</h2>
+      <section className="swot-grid">
+        {swotSections.map((section) => (
+          <div key={section.key} className={`swot-cell swot-${section.key.replace("swot_", "")}`}>
+            <ArtifactSectionCard section={section} />
+          </div>
+        ))}
+      </section>
+    </article>
+  );
+}
+
 function AuthPanel({
   onAuthenticated,
 }: {
@@ -378,6 +451,11 @@ export default function App() {
   const [onePagerTicker, setOnePagerTicker] = useState("");
   const [onePagerError, setOnePagerError] = useState("");
   const [onePagerLoading, setOnePagerLoading] = useState(false);
+
+  const [business, setBusiness] = useState<BusinessSwotResponse | null>(null);
+  const [businessTicker, setBusinessTicker] = useState("");
+  const [businessError, setBusinessError] = useState("");
+  const [businessLoading, setBusinessLoading] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -530,6 +608,21 @@ export default function App() {
     }
   }
 
+  async function loadBusinessSwot(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setBusinessTicker(s);
+    setBusinessLoading(true);
+    setBusinessError("");
+    try {
+      setBusiness(await getBusinessSwot(s));
+    } catch (e) {
+      setBusinessError(e instanceof Error ? e.message : "Failed to load business & SWOT");
+    } finally {
+      setBusinessLoading(false);
+    }
+  }
+
   return (
     <div className="app">
       {!user ? (
@@ -557,9 +650,15 @@ export default function App() {
               <button className={view === "ingest" ? "tab active" : "tab"} onClick={() => setView("ingest")}>
                 Ingest
               </button>
-              <button className={view === "step1" ? "tab active" : "tab"} onClick={() => setView("step1")}>
-                Step 1
-              </button>
+              {DOSSIER_STEPS.map((step) => (
+                <button
+                  key={step.n}
+                  className={view === step.view ? "tab active" : "tab"}
+                  onClick={() => setView(step.view)}
+                >
+                  Step {step.n}
+                </button>
+              ))}
               <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
                 Financials
               </button>
@@ -649,7 +748,31 @@ export default function App() {
             {onePager && <OnePagerCard response={onePager} onGate={setGate} />}
           </main>
         </div>
-      ) : (
+      ) : view === "step2" ? (
+        <div className="layout">
+          <main className="content">
+            <div className="search">
+              <input
+                value={businessTicker}
+                onChange={(e) => setBusinessTicker(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadBusinessSwot(businessTicker)}
+                placeholder="e.g. TSLA"
+                className="ticker-input"
+              />
+              <button
+                onClick={() => loadBusinessSwot(businessTicker)}
+                disabled={businessLoading}
+                className="primary"
+              >
+                Load
+              </button>
+            </div>
+            {businessLoading && <div className="status">Drafting Business & SWOT…</div>}
+            {businessError && <div className="error-banner">{businessError}</div>}
+            {business && <BusinessSwotCard response={business} />}
+          </main>
+        </div>
+      ) : view === "numbers" ? (
         <div className="layout">
           <main className="content">
             <div className="search">
@@ -719,6 +842,20 @@ export default function App() {
                 />
               </article>
             )}
+          </main>
+        </div>
+      ) : (
+        <div className="layout">
+          <main className="content">
+            <div className="report-meta">
+              <span className="meta-text">
+                {(() => {
+                  const step = DOSSIER_STEPS.find((s) => s.view === view);
+                  return `Step ${step?.n} · ${step?.label}`;
+                })()}
+              </span>
+            </div>
+            <p className="meta-text">This step is not built yet.</p>
           </main>
         </div>
       )}

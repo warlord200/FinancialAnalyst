@@ -59,3 +59,22 @@ def test_load_data_handles_xml_declaration(tmp_path):
     assert len(docs) == 1
     assert docs[0].metadata["item"] == "ITEM 7"
     assert "Revenue grew" in docs[0].text
+
+
+def test_load_data_passes_through_extra_metadata(tmp_path):
+    fixture = tmp_path / "2025" / "TSLA.htm"
+    fixture.parent.mkdir()
+    fixture.write_text(
+        "<html><body><h2>Item 1.</h2><p>Business text.</p></body></html>",
+        encoding="utf-8",
+    )
+    reader = SECHtmlReader()
+    docs = reader.load_data(
+        str(fixture), extra_info={"ticker": "TSLA", "fiscal_year": 2025, "filing": "10-K"}
+    )
+
+    assert len(docs) == 1
+    assert docs[0].metadata["ticker"] == "TSLA"
+    assert docs[0].metadata["fiscal_year"] == 2025
+    assert docs[0].metadata["item"] == "ITEM 1"
+    assert docs[0].metadata["filing"] == "10-K"

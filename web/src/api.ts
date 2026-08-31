@@ -120,6 +120,41 @@ export interface GateResponse {
   gate: StepGate;
 }
 
+export type SourceTagType = "fiscal_year" | "filing" | "item" | "xbrl_fact";
+
+export interface SourceTag {
+  type: SourceTagType;
+  value: string;
+}
+
+export interface ArtifactSection {
+  key: string;
+  heading: string;
+  content: string;
+  sources: SourceTag[];
+  evidence: string[];
+}
+
+export interface ArtifactScope {
+  items: string[];
+  fiscal_year: number | null;
+}
+
+export interface BusinessSwotArtifact {
+  ticker: string;
+  artifact_type: string;
+  fiscal_year: number | null;
+  scope: ArtifactScope;
+  generated_at: string;
+  sections: ArtifactSection[];
+}
+
+export interface BusinessSwotResponse {
+  ticker: string;
+  artifact: BusinessSwotArtifact;
+  cached: boolean;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const TOKEN_KEY = "fa_token";
 
@@ -189,6 +224,10 @@ export function setStepGate(ticker: string, decision: "accept" | "reject") {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision }),
   });
+}
+
+export function getBusinessSwot(ticker: string) {
+  return request<BusinessSwotResponse>(`/api/steps/${ticker}/business-swot`);
 }
 
 export function ingestTicker(ticker: string) {
