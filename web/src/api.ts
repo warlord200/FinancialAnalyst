@@ -81,6 +81,45 @@ export interface QuotaStatus {
   chat: QuotaState;
 }
 
+export type TagLabel = "bullish" | "neutral" | "bearish";
+
+export interface OnePager {
+  latest_fiscal_year: number | null;
+  source: string;
+  growth: {
+    latest_revenue: number | null;
+    revenue_growth_yoy: number | null;
+    revenue_cagr_5y: number | null;
+  };
+  profitability: {
+    gross_margin: number | null;
+    operating_margin: number | null;
+    net_margin: number | null;
+  };
+  debt: {
+    debt_to_assets: number | null;
+    debt_to_equity: number | null;
+  };
+  tag: { label: TagLabel; score: number; rationale: string };
+}
+
+export interface StepGate {
+  step: number;
+  status: "accepted" | "rejected";
+  updated_at: string;
+}
+
+export interface OnePagerResponse {
+  ticker: string;
+  one_pager: OnePager;
+  gate: StepGate | null;
+}
+
+export interface GateResponse {
+  ticker: string;
+  gate: StepGate;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const TOKEN_KEY = "fa_token";
 
@@ -138,6 +177,18 @@ export function getMe() {
 
 export function getQuota() {
   return request<QuotaStatus>("/api/auth/quota");
+}
+
+export function getOnePager(ticker: string) {
+  return request<OnePagerResponse>(`/api/steps/${ticker}/one-pager`);
+}
+
+export function setStepGate(ticker: string, decision: "accept" | "reject") {
+  return request<GateResponse>(`/api/steps/${ticker}/gate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision }),
+  });
 }
 
 export function ingestTicker(ticker: string) {

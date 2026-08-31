@@ -20,6 +20,8 @@ from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.numbers.xbrl import fetch_company_facts
 from financial_analyst.reader.chunker import chunk_documents
 from financial_analyst.reader.sec_html_reader import SECHtmlReader
+from financial_analyst.steps.service import StepsService
+from financial_analyst.steps.state import StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
 
 _analyzer: Analyzer | None = None
@@ -27,6 +29,7 @@ _ingest_service: "IngestService | None" = None
 _numbers_service: "NumbersService | None" = None
 _auth_service: "AuthService | None" = None
 _quota_service: "QuotaService | None" = None
+_steps_service: "StepsService | None" = None
 _embed_model = None
 _llm = None
 
@@ -224,3 +227,14 @@ def get_quota_service() -> QuotaService:
         store=QuotaStore("./storage/quota.db"),
     )
     return _quota_service
+
+
+def get_steps_service() -> StepsService:
+    global _steps_service
+    if _steps_service is not None:
+        return _steps_service
+    _steps_service = StepsService(
+        numbers_service=get_numbers_service(),
+        state_store=StepStateStore("./storage/steps.db"),
+    )
+    return _steps_service

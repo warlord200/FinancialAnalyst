@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +17,7 @@ from financial_analyst.ingestion.sec_downloader import (
     TickerNotFoundError,
 )
 from financial_analyst.numbers.xbrl import XBRLEdgarError
+from financial_analyst.steps import STEP_ONE
 
 
 class PriceOverride(BaseModel):
@@ -26,6 +27,10 @@ class PriceOverride(BaseModel):
 class AuthRequest(BaseModel):
     email: str
     password: str
+
+
+class GateRequest(BaseModel):
+    decision: Literal["accept", "reject"]
 
 
 def get_current_user(request: Request) -> dict:
@@ -122,6 +127,28 @@ def create_app() -> FastAPI:
     def quota(user: CurrentUser):
         return _get_quota_service().status(user)
 
+    @app.get("/api/steps/{ticker}/one-pager")
+    def get_one_pager(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_steps_service().one_pager(user["email"], ticker)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.post("/api/steps/{ticker}/gate")
+    def set_step_gate(ticker: str, body: GateRequest, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_steps_service().set_gate(user["email"], ticker, STEP_ONE, body.decision)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
     @app.post("/api/ingest/{ticker}")
     def ingest(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):
         ticker = ticker.upper()
@@ -206,6 +233,10 @@ def _get_auth_service():
 
 def _get_quota_service():
     return services.get_quota_service()
+
+
+def _get_steps_service():
+    return services.get_steps_service()
 
 
 app = create_app()

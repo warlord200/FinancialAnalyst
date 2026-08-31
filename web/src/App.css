@@ -43,4 +43,10 @@ button.primary { font-size: 1.1rem; padding: 10px 18px; }
 .auth-form input { padding: 10px 12px; font-size: 1rem; }
 .auth-form button { align-self: flex-start; }
 .user-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.one-pager-block { margin: 16px 0; }
+.one-pager-block h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.metric-row { display: flex; justify-content: space-between; max-width: 340px; padding: 4px 0; border-bottom: 1px solid #f0f0f3; }
+.gate-block { margin-top: 20px; padding-top: 12px; border-top: 1px solid #e8e8ed; }
+.gate-actions { display: flex; gap: 10px; margin-top: 8px; }
+button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; color: #b00020; border: 1px solid #f5c6c0; border-radius: 8px; cursor: pointer; }
 @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } }

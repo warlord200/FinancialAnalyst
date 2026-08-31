@@ -5,6 +5,7 @@ import {
   getIngestStats,
   getMe,
   getNumbers,
+  getOnePager,
   getQuota,
   getToken,
   ingestTicker,
@@ -13,6 +14,7 @@ import {
   logout,
   refreshNumbers,
   setPriceOverride,
+  setStepGate,
   setToken,
   signup,
   AuthUser,
@@ -20,11 +22,12 @@ import {
   IngestedTicker,
   IngestStats,
   NumbersResponse,
+  OnePagerResponse,
   QuotaStatus,
 } from "./api";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
-type View = "ingest" | "numbers";
+type View = "ingest" | "numbers" | "step1";
 
 function ChunkTable({ title, rows }: { title: string; rows: [string, number][] }) {
   return (
@@ -200,6 +203,88 @@ function PriceCard({
   );
 }
 
+function MetricRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="metric-row">
+      <span className="meta-text">{label}</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function OnePagerCard({
+  response,
+  onGate,
+}: {
+  response: OnePagerResponse;
+  onGate: (decision: "accept" | "reject") => void;
+}) {
+  const { one_pager: op, gate } = response;
+  const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
+  return (
+    <article>
+      <div className="report-meta">
+        <span className="meta-text">
+          Step 1 · one-pager · {response.ticker}
+          {op.latest_fiscal_year ? ` · FY${op.latest_fiscal_year}` : ""}
+        </span>
+        <span className={`verdict verdict-${op.tag.label}`}>{op.tag.label}</span>
+        <span className="meta-text">score {op.tag.score}/100</span>
+      </div>
+      <p className="meta-text">{op.tag.rationale} · {op.source}</p>
+      <section className="one-pager-block">
+        <h2>Growth</h2>
+        <MetricRow
+          label="Latest revenue"
+          value={op.growth.latest_revenue === null ? "n/a" : formatMoney(op.growth.latest_revenue)}
+        />
+        <MetricRow label="Revenue growth (YoY)" value={pct(op.growth.revenue_growth_yoy)} />
+        <MetricRow label="Revenue CAGR (5y)" value={pct(op.growth.revenue_cagr_5y)} />
+      </section>
+      <section className="one-pager-block">
+        <h2>Profitability</h2>
+        <MetricRow label="Gross margin" value={pct(op.profitability.gross_margin)} />
+        <MetricRow label="Operating margin" value={pct(op.profitability.operating_margin)} />
+        <MetricRow label="Net margin" value={pct(op.profitability.net_margin)} />
+      </section>
+      <section className="one-pager-block">
+        <h2>Debt</h2>
+        <MetricRow label="Debt / assets" value={pct(op.debt.debt_to_assets)} />
+        <MetricRow label="Debt / equity" value={pct(op.debt.debt_to_equity)} />
+      </section>
+      <section className="gate-block">
+        {gate === null ? (
+          <>
+            <p className="meta-text">Accept the deep dive or stop the flow.</p>
+            <div className="gate-actions">
+              <button onClick={() => onGate("accept")} className="primary">
+                Accept — deep dive
+              </button>
+              <button onClick={() => onGate("reject")} className="danger">
+                Reject
+              </button>
+            </div>
+          </>
+        ) : gate.status === "accepted" ? (
+          <p className="meta-text">
+            Accepted on {gate.updated_at.slice(0, 10)} — deep dive approved.{" "}
+            <button className="link-button" onClick={() => onGate("reject")}>
+              Reject instead
+            </button>
+          </p>
+        ) : (
+          <p className="meta-text">
+            Rejected on {gate.updated_at.slice(0, 10)} — flow stopped.{" "}
+            <button className="link-button" onClick={() => onGate("accept")}>
+              Accept instead
+            </button>
+          </p>
+        )}
+      </section>
+    </article>
+  );
+}
+
 function AuthPanel({
   onAuthenticated,
 }: {
@@ -288,6 +373,11 @@ export default function App() {
   const [numbersTicker, setNumbersTicker] = useState("");
   const [numbersError, setNumbersError] = useState("");
   const [numbersLoading, setNumbersLoading] = useState(false);
+
+  const [onePager, setOnePager] = useState<OnePagerResponse | null>(null);
+  const [onePagerTicker, setOnePagerTicker] = useState("");
+  const [onePagerError, setOnePagerError] = useState("");
+  const [onePagerLoading, setOnePagerLoading] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -408,6 +498,38 @@ export default function App() {
   const byItemRows = stats ? Object.entries(stats.chunks_by_item).sort() : [];
   const byYearRows = stats ? Object.entries(stats.chunks_by_year).sort() : [];
 
+  async function loadOnePager(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setOnePagerTicker(s);
+    setOnePagerLoading(true);
+    setOnePagerError("");
+    try {
+      try {
+        await getNumbers(s);
+      } catch {
+        await refreshNumbers(s);
+        loadQuota();
+      }
+      setOnePager(await getOnePager(s));
+    } catch (e) {
+      setOnePagerError(e instanceof Error ? e.message : "Failed to load one-pager");
+    } finally {
+      setOnePagerLoading(false);
+    }
+  }
+
+  async function setGate(decision: "accept" | "reject") {
+    if (!onePagerTicker || !onePager) return;
+    setOnePagerError("");
+    try {
+      const res = await setStepGate(onePagerTicker, decision);
+      setOnePager({ ...onePager, gate: res.gate });
+    } catch (e) {
+      setOnePagerError(e instanceof Error ? e.message : "Failed to save decision");
+    }
+  }
+
   return (
     <div className="app">
       {!user ? (
@@ -434,6 +556,9 @@ export default function App() {
             <nav className="tabs">
               <button className={view === "ingest" ? "tab active" : "tab"} onClick={() => setView("ingest")}>
                 Ingest
+              </button>
+              <button className={view === "step1" ? "tab active" : "tab"} onClick={() => setView("step1")}>
+                Step 1
               </button>
               <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
                 Financials
@@ -500,6 +625,30 @@ export default function App() {
             </aside>
           </div>
         </>
+      ) : view === "step1" ? (
+        <div className="layout">
+          <main className="content">
+            <div className="search">
+              <input
+                value={onePagerTicker}
+                onChange={(e) => setOnePagerTicker(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadOnePager(onePagerTicker)}
+                placeholder="e.g. TSLA"
+                className="ticker-input"
+              />
+              <button
+                onClick={() => loadOnePager(onePagerTicker)}
+                disabled={onePagerLoading}
+                className="primary"
+              >
+                Load
+              </button>
+            </div>
+            {onePagerLoading && <div className="status">Loading one-pager…</div>}
+            {onePagerError && <div className="error-banner">{onePagerError}</div>}
+            {onePager && <OnePagerCard response={onePager} onGate={setGate} />}
+          </main>
+        </div>
       ) : (
         <div className="layout">
           <main className="content">
