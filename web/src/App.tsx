@@ -352,6 +352,7 @@ export default function App() {
       if (res.status === "cached") {
         await openStats(s);
         refreshHistory();
+        loadQuota();
         return;
       }
       const jobId = res.job_id ?? "";
@@ -361,6 +362,7 @@ export default function App() {
         if (current.status === "completed") {
           await openStats(s);
           refreshHistory();
+          loadQuota();
           return;
         }
         if (current.status === "failed") {
@@ -385,10 +387,12 @@ export default function App() {
     try {
       const data = force ? await refreshNumbers(s) : await getNumbers(s);
       setNumbers(data);
+      if (force) loadQuota();
     } catch (e) {
       if (!force) {
         try {
           setNumbers(await refreshNumbers(s));
+          loadQuota();
           return;
         } catch (e2) {
           setNumbersError(e2 instanceof Error ? e2.message : "Failed to load numbers");
