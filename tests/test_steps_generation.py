@@ -41,32 +41,18 @@ def fabricated_evidence_json():
     return json.dumps(
         {
             "content": "The company does something.",
-            "sources": [{"type": "item", "value": "ITEM 1"}],
+            "source_refs": [1],
             "evidence": ["This sentence is not in the source material at all."],
         }
     )
 
 
-def bad_source_tag_json():
+def bad_ref_json():
     return json.dumps(
         {
             "content": "Tesla designs and manufactures electric vehicles.",
-            "sources": [{"type": "item", "value": "ITEM 7"}],
+            "source_refs": [7],
             "evidence": ["Tesla designs and manufactures electric vehicles."],
-        }
-    )
-
-
-def fy_prefixed_tag_json():
-    quote = ITEM_1_TEXT.split(". ")[0] + "."
-    return json.dumps(
-        {
-            "content": quote,
-            "sources": [
-                {"type": "item", "value": "ITEM 1"},
-                {"type": "fiscal_year", "value": "FY2025"},
-            ],
-            "evidence": [quote],
         }
     )
 
@@ -96,11 +82,25 @@ class TestFramework:
         artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
         assert artifact.sections[0].heading == "Business Overview"
 
+    def test_generate_derives_source_tags_from_cited_passage(self):
+        generator = make_generator()
+        artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+        sources = artifact.sections[0].sources
+        assert ("item", "ITEM 1") in [(t.type, t.value) for t in sources]
+        assert ("fiscal_year", "2025") in [(t.type, t.value) for t in sources]
+        assert all(t.value != "1A" for t in sources)
+
+    def test_generate_accepts_string_number_refs(self):
+        llm = FakeLLM(valid_section_json(refs=["1"]))
+        generator = make_generator(llm=llm)
+        artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+        assert artifact.sections[0].sources
+
     def test_generate_rejects_section_without_sources(self):
         generator = make_generator(llm=FakeLLM(no_sources_json(), no_sources_json()))
         with pytest.raises(ArtifactValidationError) as exc:
             generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
-        assert "no source tags" in str(exc.value)
+        assert "cites no source passages" in str(exc.value)
 
     def test_generate_rejects_fabricated_evidence(self):
         generator = make_generator(llm=FakeLLM(fabricated_evidence_json()))
@@ -108,16 +108,11 @@ class TestFramework:
             generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
         assert "evidence not found verbatim" in str(exc.value)
 
-    def test_generate_rejects_source_tag_not_in_corpus(self):
-        generator = make_generator(llm=FakeLLM(bad_source_tag_json()))
+    def test_generate_rejects_source_ref_not_in_corpus(self):
+        generator = make_generator(llm=FakeLLM(bad_ref_json()))
         with pytest.raises(ArtifactValidationError) as exc:
             generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
-        assert "ITEM 7" in str(exc.value)
-
-    def test_generate_accepts_fy_prefixed_fiscal_year_tag(self):
-        generator = make_generator(llm=FakeLLM(fy_prefixed_tag_json()))
-        artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
-        assert artifact.sections[0].sources[1].value == "FY2025"
+        assert "not among the passages shown: 7" in str(exc.value)
 
     def test_generate_accepts_markdown_fenced_json(self):
         fenced = f"```json\n{valid_section_json()}\n```"

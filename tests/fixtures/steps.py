@@ -35,14 +35,11 @@ def make_corpus(year=2025, ticker="TSLA"):
     ]
 
 
-def valid_section_json(content=ITEM_1_TEXT.split(". ")[0] + ".", evidence=None):
+def valid_section_json(content=ITEM_1_TEXT.split(". ")[0] + ".", evidence=None, refs=(1,)):
     return json.dumps(
         {
             "content": content,
-            "sources": [
-                {"type": "item", "value": "ITEM 1"},
-                {"type": "fiscal_year", "value": "2025"},
-            ],
+            "source_refs": list(refs),
             "evidence": evidence
             if evidence is not None
             else [ITEM_1_TEXT.split(". ")[0] + "."],

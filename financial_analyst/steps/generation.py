@@ -3,12 +3,18 @@
 Every dossier step that produces a drafted artifact (steps 2-4 and the
 thesis) goes through this framework. It drives a small RAG loop per
 section: retrieve source chunks scoped to the section's Item and fiscal
-year, ask the LLM for a structured section, then *enforce* the source
-tags before accepting it:
+year, ask the LLM for a structured section, then *enforce* the grounding
+before accepting it.
 
-- every section must carry at least one source tag,
-- every source tag must resolve to a source chunk the model was shown,
-- every evidence quote must appear verbatim in that source material.
+The LLM never writes source-tag values by hand — it cites the numbered
+source passages it was shown (``source_refs``), and the framework derives
+each section's source tags from the cited chunks' own metadata (Item,
+fiscal year, filing). Tags are therefore correct by construction and can
+never reference material the model did not see:
+
+- every section must cite at least one source passage,
+- every citation must be a passage the model was shown,
+- every evidence quote must appear verbatim in the source material.
 
 A section that fails enforcement is sent back once with the violations;
 if it still fails, generation raises :class:`ArtifactValidationError` so
@@ -122,30 +128,21 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
-def _tag_matches_chunks(tag: SourceTag, chunks) -> bool:
-    if tag.type == "item":
-        return any(c.item == tag.value for c in chunks)
-    if tag.type == "fiscal_year":
-        wanted = tag.value.strip().upper().removeprefix("FY")
-        return any(
-            c.fiscal_year is not None and str(c.fiscal_year) == wanted for c in chunks
-        )
-    if tag.type == "filing":
-        return any(c.filing == tag.value for c in chunks)
-    if tag.type == "xbrl_fact":
-        return any(getattr(c, "fact_key", None) == tag.value for c in chunks)
-    return False
+def _tags_for_chunk(chunk) -> list[SourceTag]:
+    tags = []
+    if chunk.item:
+        tags.append(SourceTag(type="item", value=chunk.item))
+    if chunk.fiscal_year is not None:
+        tags.append(SourceTag(type="fiscal_year", value=str(chunk.fiscal_year)))
+    if chunk.filing:
+        tags.append(SourceTag(type="filing", value=chunk.filing))
+    return tags
 
 
 def _validate_section(section: ArtifactSection, chunks) -> list[str]:
     violations: list[str] = []
     if not section.sources:
         violations.append("section has no source tags")
-    for tag in section.sources:
-        if not _tag_matches_chunks(tag, chunks):
-            violations.append(
-                f"source tag not found in source material: {tag.type}={tag.value}"
-            )
     corpus = " ".join(_norm(c.text) for c in chunks)
     for quote in section.evidence:
         if _norm(quote) not in corpus:
@@ -240,12 +237,33 @@ class ArtifactGenerator:
         data = _parse_json(text)
         if data is None:
             return None, ["response was not valid JSON"]
+        refs = data.get("source_refs", [])
+        if isinstance(refs, (int, str)):
+            refs = [refs]
+        violations: list[str] = []
+        if not refs:
+            violations.append("section cites no source passages")
+        sources: list[SourceTag] = []
+        for ref in refs:
+            try:
+                index = int(ref)
+            except (TypeError, ValueError):
+                violations.append(f"source reference is not a passage number: {ref!r}")
+                continue
+            if not (1 <= index <= len(chunks)):
+                violations.append(f"source reference not among the passages shown: {index}")
+                continue
+            for tag in _tags_for_chunk(chunks[index - 1]):
+                if tag not in sources:
+                    sources.append(tag)
+        if violations:
+            return None, violations
         try:
             section = ArtifactSection(
                 key=spec.key,
                 heading=spec.heading,
                 content=data["content"],
-                sources=data.get("sources", []),
+                sources=sources,
                 evidence=data.get("evidence", []),
             )
         except (ValidationError, KeyError) as exc:
@@ -276,8 +294,8 @@ class ArtifactGenerator:
             ]
         parts += [
             f"Write the section as 3-6 sentences of factual prose based ONLY on the source passages. {spec.instruction}",
-            'Return ONLY a JSON object: {"content": "<prose>", "sources": [{"type": "item"|"fiscal_year"|"filing"|"xbrl_fact", "value": "..."}], "evidence": ["<verbatim sentence from a passage>"]}.',
-            'Rules: "sources" must reference only the passages shown (their Item, fiscal year, or filing). "evidence" entries must be exact quotes taken verbatim from the passages (whitespace normalized). At least one source is required.',
+            'Return ONLY a JSON object: {"content": "<prose>", "source_refs": [<numbers of the passages above that back this section>], "evidence": ["<verbatim sentence from a cited passage>"]}.',
+            'Rules: "source_refs" must list at least one of the numbered passages above and only passages this section actually draws on. "evidence" entries must be exact quotes taken verbatim from those passages (whitespace normalized).',
         ]
         return "\n\n".join(parts)
 
