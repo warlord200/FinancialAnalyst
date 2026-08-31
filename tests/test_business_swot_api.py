@@ -5,6 +5,7 @@ from financial_analyst.numbers.prices import PriceStore
 from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
+from financial_analyst.steps.retrieval import EmbedModelMismatchError
 from financial_analyst.steps.service import StepsService
 from financial_analyst.steps.state import StepStateStore
 from tests.auth_helpers import GENEROUS_LIMITS, build_client, signup_and_auth
@@ -94,3 +95,20 @@ class TestBusinessSwot:
         resp = client.get("/api/steps/TSLA/business-swot")
         assert resp.status_code == 502
         assert "grounded" in resp.json()["detail"]
+
+    def test_business_swot_503_on_embedding_model_mismatch(self, tmp_path, monkeypatch):
+        from types import SimpleNamespace
+
+        def boom(email, ticker):
+            raise EmbedModelMismatchError(2560)
+
+        monkeypatch.setattr(
+            main,
+            "_get_steps_service",
+            lambda: SimpleNamespace(business_swot=boom),
+        )
+        client, _, _ = build_client(tmp_path, monkeypatch, limits=GENEROUS_LIMITS)
+        signup_and_auth(client, email="steps@example.com")
+        resp = client.get("/api/steps/TSLA/business-swot")
+        assert resp.status_code == 503
+        assert "2560-dimensional" in resp.json()["detail"]

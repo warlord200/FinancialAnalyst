@@ -1,7 +1,7 @@
 from collections import Counter
 
 import chromadb
-from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core import Settings, StorageContext, VectorStoreIndex
 from llama_index.core.schema import TextNode
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
@@ -33,7 +33,21 @@ class CompanyIndex:
         store = ChromaVectorStore(chroma_collection=collection)
         context = StorageContext.from_defaults(vector_store=store)
         VectorStoreIndex(nodes=nodes, storage_context=context)
+        self._record_embed_metadata(collection)
         return collection.count()
+
+    def _record_embed_metadata(self, collection) -> None:
+        sample = collection.get(limit=1, include=["embeddings"])
+        embeddings = sample.get("embeddings")
+        if embeddings is None or len(embeddings) == 0:
+            return
+        embed_model = getattr(getattr(Settings, "embed_model", None), "model_name", None)
+        collection.modify(
+            metadata={
+                "embed_dim": len(embeddings[0]),
+                "embed_model": embed_model or "",
+            }
+        )
 
     def stats(self, ticker: str) -> dict:
         try:

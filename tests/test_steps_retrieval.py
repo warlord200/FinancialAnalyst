@@ -5,7 +5,7 @@ from llama_index.core.llms import MockLLM
 from llama_index.core.schema import TextNode
 
 from financial_analyst.indexing.company_index import CompanyIndex
-from financial_analyst.steps.retrieval import ScopedRetriever
+from financial_analyst.steps.retrieval import EmbedModelMismatchError, ScopedRetriever
 
 NODES = [
     TextNode(
@@ -81,3 +81,24 @@ def test_fiscal_years_returns_sorted_years(tmp_path, mock_models):
 def test_fiscal_years_empty_when_not_ingested(tmp_path, mock_models):
     retriever = ScopedRetriever(make_index(tmp_path))
     assert retriever.fiscal_years("NOPE") == []
+
+
+def test_build_records_embedding_metadata(tmp_path, mock_models):
+    index = make_index(tmp_path)
+    collection = index.collection("TSLA")
+    assert collection.metadata["embed_dim"] == 8
+    assert collection.metadata["embed_model"]
+
+
+def test_retrieve_raises_clear_error_on_embedding_dim_mismatch(tmp_path, mock_models):
+    index = make_index(tmp_path)
+    retriever = ScopedRetriever(index)
+    old = Settings.embed_model
+    Settings.embed_model = MockEmbedding(embed_dim=4)
+    try:
+        with pytest.raises(EmbedModelMismatchError) as exc:
+            retriever.retrieve("TSLA", "business")
+        assert "8-dimensional" in str(exc.value)
+        assert "EMBED_MODEL" in str(exc.value)
+    finally:
+        Settings.embed_model = old

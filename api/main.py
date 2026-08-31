@@ -19,6 +19,7 @@ from financial_analyst.ingestion.sec_downloader import (
 from financial_analyst.numbers.xbrl import XBRLEdgarError
 from financial_analyst.steps import STEP_ONE
 from financial_analyst.steps.generation import ArtifactValidationError
+from financial_analyst.steps.retrieval import EmbedModelMismatchError
 
 
 class PriceOverride(BaseModel):
@@ -159,6 +160,11 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status_code=502,
                 detail=f"Could not produce a grounded draft: {exc}",
+            )
+        except EmbedModelMismatchError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
             )
         if result is None:
             raise HTTPException(
