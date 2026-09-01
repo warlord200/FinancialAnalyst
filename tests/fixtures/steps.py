@@ -71,6 +71,34 @@ def make_strategy_corpus(year=2025, ticker="TSLA"):
     ]
 
 
+def make_all_items_corpus(year=2025, ticker="TSLA"):
+    """Every Item used by the dossier steps in one corpus, so chat scoping
+    tests can assert retrieval stops at the step's own items."""
+    return [
+        SourceChunk(text=ITEM_1_TEXT, item="ITEM 1", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_1A_TEXT, item="ITEM 1A", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_5_TEXT, item="ITEM 5", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_7_TEXT, item="ITEM 7", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_8_TEXT, item="ITEM 8", fiscal_year=year, ticker=ticker, filing="10-K"),
+    ]
+
+
+def valid_chat_json(answer=None, refs=(1,), evidence=None):
+    """An LLM response that satisfies chat grounding: it answers with the
+    cited passage number and quotes evidence verbatim."""
+    if answer is None:
+        answer = ITEM_1_TEXT.split(". ")[0] + "."
+    return json.dumps(
+        {
+            "answer": answer,
+            "source_refs": list(refs),
+            "evidence": evidence
+            if evidence is not None
+            else [ITEM_1_TEXT.split(". ")[0] + "."],
+        }
+    )
+
+
 def valid_section_json(content=ITEM_1_TEXT.split(". ")[0] + ".", evidence=None, refs=(1,)):
     return json.dumps(
         {
@@ -114,6 +142,22 @@ class FakeRetriever:
             if (items is None or c.item in items)
             and (fiscal_year is None or c.fiscal_year == fiscal_year)
         ]
+
+
+class RecordingRetriever(FakeRetriever):
+    """A fake retriever that records what each retrieve call was scoped to,
+    so tests can assert the step's items (or the escape hatch's whole-corpus
+    search) reached the retrieval layer."""
+
+    def __init__(self, chunks=None):
+        super().__init__(chunks)
+        self.retrieve_args = []
+
+    def retrieve(self, ticker, query, items=None, fiscal_year=None, top_k=None):
+        self.retrieve_args.append(
+            {"items": items, "fiscal_year": fiscal_year, "top_k": top_k}
+        )
+        return super().retrieve(ticker, query, items=items, fiscal_year=fiscal_year, top_k=top_k)
 
 
 class FakeLLM:

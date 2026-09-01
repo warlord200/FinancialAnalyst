@@ -71,3 +71,19 @@ button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; colo
   background: #f7f8fa; border-radius: 10px; padding: 4px 14px; border: 1px solid #e8e8ed;
 }
 @media (max-width: 800px) { .swot-grid { grid-template-columns: 1fr; } }
+
+.chat-panel {
+  margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e8ed;
+}
+.chat-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 8px; flex-wrap: wrap;
+}
+.chat-search-all { display: flex; align-items: center; gap: 6px; color: #5f6368; font-size: 0.9rem; }
+.chat-log { display: flex; flex-direction: column; gap: 12px; max-height: 420px; overflow-y: auto; margin-bottom: 12px; }
+.chat-msg { background: #f7f8fa; border-radius: 10px; padding: 10px 14px; }
+.chat-msg.chat-user { background: #e8f0fe; }
+.chat-role { font-size: 0.78rem; font-weight: 700; color: #5f6368; text-transform: uppercase; letter-spacing: 0.04em; }
+.chat-text { margin: 4px 0; line-height: 1.5; white-space: pre-wrap; }
+.chat-input-row { display: flex; gap: 8px; }
+.chat-input-row input { flex: 1; padding: 10px 12px; font-size: 1rem; }

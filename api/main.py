@@ -5,7 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from api import services
-from financial_analyst.auth.quota import RESOURCE_ANALYSES, QuotaExceededError
+from financial_analyst.auth.quota import (
+    RESOURCE_ANALYSES,
+    RESOURCE_CHAT,
+    QuotaExceededError,
+)
 from financial_analyst.auth.users import (
     InvalidCredentialsError,
     InvalidEmailError,
@@ -18,7 +22,8 @@ from financial_analyst.ingestion.sec_downloader import (
 )
 from financial_analyst.numbers.xbrl import XBRLEdgarError
 from financial_analyst.steps import STEP_ONE
-from financial_analyst.steps.generation import ArtifactValidationError
+from financial_analyst.steps.chat import UnsupportedStepError
+from financial_analyst.steps.generation import ArtifactValidationError, NoSourceError
 from financial_analyst.steps.retrieval import EmbedModelMismatchError
 
 
@@ -33,6 +38,12 @@ class AuthRequest(BaseModel):
 
 class GateRequest(BaseModel):
     decision: Literal["accept", "reject"]
+
+
+class ChatRequest(BaseModel):
+    step: int
+    question: str
+    search_all: bool = False
 
 
 def _no_source_detail(ticker: str) -> str:
@@ -218,6 +229,48 @@ def create_app() -> FastAPI:
                 detail=str(exc),
             )
         if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=_no_source_detail(ticker),
+            )
+        return result
+
+    @app.post("/api/steps/{ticker}/chat")
+    def chat(
+        ticker: str,
+        body: ChatRequest,
+        user: CurrentUser,
+        quota: dict = Depends(require_quota(RESOURCE_CHAT)),
+    ):
+        ticker = ticker.upper()
+        if not body.question.strip():
+            _get_quota_service().refund(user, RESOURCE_CHAT)
+            raise HTTPException(status_code=400, detail="Question cannot be empty.")
+        try:
+            result = _get_steps_service().chat(
+                user["email"],
+                ticker,
+                body.step,
+                body.question.strip(),
+                body.search_all,
+            )
+        except UnsupportedStepError as exc:
+            _get_quota_service().refund(user, RESOURCE_CHAT)
+            raise HTTPException(status_code=400, detail=str(exc))
+        except NoSourceError:
+            _get_quota_service().refund(user, RESOURCE_CHAT)
+            raise HTTPException(status_code=404, detail=_no_source_detail(ticker))
+        except ArtifactValidationError as exc:
+            _get_quota_service().refund(user, RESOURCE_CHAT)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not produce a grounded answer: {exc}",
+            )
+        except EmbedModelMismatchError as exc:
+            _get_quota_service().refund(user, RESOURCE_CHAT)
+            raise HTTPException(status_code=503, detail=str(exc))
+        if result is None:
+            _get_quota_service().refund(user, RESOURCE_CHAT)
             raise HTTPException(
                 status_code=404,
                 detail=_no_source_detail(ticker),

@@ -83,11 +83,13 @@ class ArtifactValidationError(Exception):
         self.violations = violations
 
 
-def _norm(text: str) -> str:
+def norm(text: str) -> str:
+    """Normalize text for verbatim-evidence comparisons: collapse
+    whitespace and case. Shared by artifact and chat grounding."""
     return " ".join(text.split()).lower()
 
 
-def _parse_json(text: str) -> dict | None:
+def parse_json(text: str) -> dict | None:
     stripped = text.strip()
     if stripped.startswith("```"):
         stripped = stripped.strip("`").strip()
@@ -128,7 +130,7 @@ def _parse_json(text: str) -> dict | None:
     return None
 
 
-def _tags_for_chunk(chunk) -> list[SourceTag]:
+def tags_for_chunk(chunk) -> list[SourceTag]:
     tags = []
     if chunk.item:
         tags.append(SourceTag(type="item", value=chunk.item))
@@ -139,20 +141,51 @@ def _tags_for_chunk(chunk) -> list[SourceTag]:
     return tags
 
 
-def _validate_section(section: ArtifactSection, chunks) -> list[str]:
+def cited_chunks(refs, chunks) -> tuple[list, list[str]]:
+    """Validate the LLM's numbered source references against the passages
+    it was shown, returning the cited chunks plus any violations. Shared by
+    the artifact and chat grounding loops so both enforce the same rule:
+    every citation must point at a passage the model actually saw."""
+    if isinstance(refs, (int, str)):
+        refs = [refs]
+    cited: list = []
+    violations: list[str] = []
+    if not refs:
+        return cited, ["cites no source passages"]
+    for ref in refs:
+        try:
+            index = int(ref)
+        except (TypeError, ValueError):
+            violations.append(f"source reference is not a passage number: {ref!r}")
+            continue
+        if not (1 <= index <= len(chunks)):
+            violations.append(f"source reference not among the passages shown: {index}")
+            continue
+        if chunks[index - 1] not in cited:
+            cited.append(chunks[index - 1])
+    return cited, violations
+
+
+def evidence_violations(evidence: list, chunks) -> list[str]:
+    """Reject evidence quotes that do not appear verbatim in the passages
+    the model was shown. Shared by the artifact and chat grounding loops."""
+    corpus = " ".join(norm(c.text) for c in chunks)
+    return [
+        f"evidence not found verbatim in source material: {quote[:64]!r}"
+        for quote in evidence
+        if norm(str(quote)) not in corpus
+    ]
+
+
+def validate_section(section: ArtifactSection, chunks) -> list[str]:
     violations: list[str] = []
     if not section.sources:
         violations.append("section has no source tags")
-    corpus = " ".join(_norm(c.text) for c in chunks)
-    for quote in section.evidence:
-        if _norm(quote) not in corpus:
-            violations.append(
-                f"evidence not found verbatim in source material: {quote[:64]!r}"
-            )
+    violations.extend(evidence_violations(section.evidence, chunks))
     return violations
 
 
-def _render_chunks(chunks) -> str:
+def render_chunks(chunks) -> str:
     lines = []
     for i, chunk in enumerate(chunks, 1):
         meta = ", ".join(
@@ -275,30 +308,17 @@ class ArtifactGenerator:
         self, spec: SectionSpec, prompt: str, chunks
     ) -> tuple[ArtifactSection | None, list[str]]:
         text = self.llm.complete(prompt).text
-        data = _parse_json(text)
+        data = parse_json(text)
         if data is None:
             return None, ["response was not valid JSON"]
-        refs = data.get("source_refs", [])
-        if isinstance(refs, (int, str)):
-            refs = [refs]
-        violations: list[str] = []
-        if not refs:
-            violations.append("section cites no source passages")
-        sources: list[SourceTag] = []
-        for ref in refs:
-            try:
-                index = int(ref)
-            except (TypeError, ValueError):
-                violations.append(f"source reference is not a passage number: {ref!r}")
-                continue
-            if not (1 <= index <= len(chunks)):
-                violations.append(f"source reference not among the passages shown: {index}")
-                continue
-            for tag in _tags_for_chunk(chunks[index - 1]):
-                if tag not in sources:
-                    sources.append(tag)
+        cited, violations = cited_chunks(data.get("source_refs", []), chunks)
         if violations:
             return None, violations
+        sources: list[SourceTag] = []
+        for chunk in cited:
+            for tag in tags_for_chunk(chunk):
+                if tag not in sources:
+                    sources.append(tag)
         try:
             section = ArtifactSection(
                 key=spec.key,
@@ -309,7 +329,7 @@ class ArtifactGenerator:
             )
         except (ValidationError, KeyError) as exc:
             return None, [f"invalid section shape: {exc}"]
-        return section, _validate_section(section, chunks)
+        return section, validate_section(section, chunks)
 
     def _section_prompt(
         self,
@@ -323,7 +343,7 @@ class ArtifactGenerator:
             f"You are drafting the '{spec.heading}' section of a {ticker} dossier.",
             f"Source material: the fiscal {fiscal_year} 10-K filings.",
             "Source passages (numbered; only these may be used):",
-            _render_chunks(chunks),
+            render_chunks(chunks),
         ]
         if spec.context_from:
             context = "\n\n".join(

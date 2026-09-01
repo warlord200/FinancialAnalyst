@@ -20,6 +20,7 @@ from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.numbers.xbrl import fetch_company_facts
 from financial_analyst.reader.chunker import chunk_documents
 from financial_analyst.reader.sec_html_reader import SECHtmlReader
+from financial_analyst.steps.chat import ChatService
 from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
 from financial_analyst.steps.retrieval import ScopedRetriever
@@ -242,10 +243,12 @@ def get_steps_service() -> StepsService:
         CompanyIndex(chroma_path="./chroma_db", storage_base="./storage")
     )
     generator = ArtifactGenerator(retriever, Settings.llm)
+    chat_service = ChatService(retriever, Settings.llm)
     _steps_service = StepsService(
         numbers_service=get_numbers_service(),
         state_store=StepStateStore("./storage/steps.db"),
         generator=generator,
         draft_store=DraftStore("./storage/drafts.json"),
+        chat_service=chat_service,
     )
     return _steps_service

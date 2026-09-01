@@ -24,11 +24,13 @@ class StepsService:
         state_store,
         generator=None,
         draft_store=None,
+        chat_service=None,
     ) -> None:
         self.numbers = numbers_service
         self.state = state_store
         self.generator = generator
         self.drafts = draft_store
+        self.chat_service = chat_service
 
     def one_pager(self, email: str, ticker: str) -> dict | None:
         ticker = ticker.upper()
@@ -119,3 +121,23 @@ class StepsService:
         if self.drafts is not None:
             self.drafts.set_draft(ticker, STRATEGY_TYPE, artifact.model_dump())
         return {"ticker": ticker, "artifact": artifact, "cached": False}
+
+    def chat(
+        self,
+        email: str,
+        ticker: str,
+        step: int,
+        question: str,
+        search_all: bool = False,
+    ) -> dict | None:
+        """Answer a question scoped to the step's source items by default,
+        or to the whole corpus via the search-everything escape hatch.
+
+        Returns None when no chat service is wired, so the caller can 404.
+        The email is unused for now because chat history is not persisted;
+        per-user chat state lands with the thesis work.
+        """
+        ticker = ticker.upper()
+        if self.chat_service is None:
+            return None
+        return self.chat_service.answer(ticker, question, step, search_all)

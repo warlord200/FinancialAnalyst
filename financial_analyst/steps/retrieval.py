@@ -47,6 +47,18 @@ class SourceChunk:
     ticker: str = ""
     filing: str | None = None
 
+    def to_dict(self) -> dict:
+        """Serializable form of the chunk used for citations: the source
+        metadata plus the passage text, so an answer can carry the chunks
+        it came from."""
+        return {
+            "text": self.text,
+            "item": self.item,
+            "fiscal_year": self.fiscal_year,
+            "ticker": self.ticker,
+            "filing": self.filing,
+        }
+
 
 class ScopedRetriever:
     def __init__(self, index: CompanyIndex, default_top_k: int = 4) -> None:

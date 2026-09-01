@@ -192,6 +192,24 @@ export interface StrategyResponse {
   cached: boolean;
 }
 
+export interface ChatSource {
+  text: string;
+  item: string | null;
+  fiscal_year: number | null;
+  ticker: string;
+  filing: string | null;
+}
+
+export interface ChatResponse {
+  ticker: string;
+  step: number;
+  search_all: boolean;
+  scope: { items: string[] | null; fiscal_year: number | null };
+  answer: string;
+  evidence: string[];
+  sources: ChatSource[];
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const TOKEN_KEY = "fa_token";
 
@@ -273,6 +291,19 @@ export function getFinancials(ticker: string) {
 
 export function getStrategy(ticker: string) {
   return request<StrategyResponse>(`/api/steps/${ticker}/strategy`);
+}
+
+export function chatStep(
+  ticker: string,
+  step: number,
+  question: string,
+  searchAll = false
+) {
+  return request<ChatResponse>(`/api/steps/${ticker}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ step, question, search_all: searchAll }),
+  });
 }
 
 export function ingestTicker(ticker: string) {
