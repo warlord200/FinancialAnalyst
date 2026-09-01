@@ -182,6 +182,16 @@ export interface FinancialsResponse {
   cached: boolean;
 }
 
+export interface StrategyArtifact extends Artifact {
+  returns: FinancialTable | null;
+}
+
+export interface StrategyResponse {
+  ticker: string;
+  artifact: StrategyArtifact;
+  cached: boolean;
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const TOKEN_KEY = "fa_token";
 
@@ -259,6 +269,10 @@ export function getBusinessSwot(ticker: string) {
 
 export function getFinancials(ticker: string) {
   return request<FinancialsResponse>(`/api/steps/${ticker}/financials`);
+}
+
+export function getStrategy(ticker: string) {
+  return request<StrategyResponse>(`/api/steps/${ticker}/strategy`);
 }
 
 export function ingestTicker(ticker: string) {

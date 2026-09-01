@@ -35,6 +35,13 @@ class GateRequest(BaseModel):
     decision: Literal["accept", "reject"]
 
 
+def _no_source_detail(ticker: str) -> str:
+    return (
+        f"No numbers or indexed source material for {ticker}; "
+        "refresh numbers and ingest the ticker first."
+    )
+
+
 def get_current_user(request: Request) -> dict:
     scheme, _, token = request.headers.get("Authorization", "").partition(" ")
     if scheme.lower() != "bearer" or not token:
@@ -191,7 +198,29 @@ def create_app() -> FastAPI:
         if result is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"No numbers or corpus for {ticker}; refresh numbers and ingest first.",
+                detail=_no_source_detail(ticker),
+            )
+        return result
+
+    @app.get("/api/steps/{ticker}/strategy")
+    def get_strategy(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        try:
+            result = _get_steps_service().strategy(user["email"], ticker)
+        except ArtifactValidationError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not produce a grounded draft: {exc}",
+            )
+        except EmbedModelMismatchError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=str(exc),
+            )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=_no_source_detail(ticker),
             )
         return result
 

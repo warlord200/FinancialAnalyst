@@ -9,7 +9,16 @@ from financial_analyst.steps.generation import (
     NoSourceError,
     SectionSpec,
 )
-from tests.fixtures.steps import FakeLLM, FakeRetriever, ITEM_1_TEXT, valid_section_json
+from financial_analyst.steps.retrieval import SourceChunk
+from tests.fixtures.steps import (
+    FakeLLM,
+    FakeRetriever,
+    ITEM_1_TEXT,
+    ITEM_7_TEXT,
+    ITEM_8_TEXT,
+    valid_financials_section_json,
+    valid_section_json,
+)
 
 SINGLE_SPEC = SectionSpec(
     key="overview",
@@ -145,6 +154,27 @@ class TestFramework:
         generator = make_generator(retriever=FakeRetriever(chunks=[], years=[2025]))
         with pytest.raises(NoSourceError):
             generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+
+    def test_generate_uses_latest_year_that_has_requested_items(self):
+        annual_items_spec = SectionSpec(
+            key="annual",
+            heading="Annual Items",
+            query="annual query",
+            items=("ITEM 7", "ITEM 8"),
+        )
+        corpus = [
+            SourceChunk(text=ITEM_1_TEXT, item="ITEM 1", fiscal_year=2026, ticker="TSLA", filing="10-Q"),
+            SourceChunk(text=ITEM_7_TEXT, item="ITEM 7", fiscal_year=2025, ticker="TSLA", filing="10-K"),
+            SourceChunk(text=ITEM_8_TEXT, item="ITEM 8", fiscal_year=2025, ticker="TSLA", filing="10-K"),
+        ]
+        retriever = FakeRetriever(chunks=corpus, years=(2026, 2025))
+        generator = make_generator(
+            retriever=retriever, llm=FakeLLM(valid_financials_section_json())
+        )
+        artifact = generator.generate("TSLA", "test_artifact", [annual_items_spec])
+        assert artifact.fiscal_year == 2025
+        assert artifact.sections[0].sources
+        assert ("fiscal_year", "2025") in [(t.type, t.value) for t in artifact.sections[0].sources]
 
     def test_context_from_includes_prior_sections(self):
         llm = FakeLLM()

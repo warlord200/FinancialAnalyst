@@ -27,6 +27,14 @@ ITEM_1A_TEXT = (
     "Regulatory changes could increase our costs."
 )
 
+ITEM_5_TEXT = (
+    "Our common stock trades on the Nasdaq Global Select Market under the symbol TSLA. "
+    "We have never declared or paid cash dividends on our common stock. "
+    "We intend to retain future earnings for reinvestment in our business. "
+    "We finance our operations primarily through operating cash flows and occasional debt offerings. "
+    "Management believes our capital structure supports our long-term growth plan."
+)
+
 ITEM_7_TEXT = (
     "Management believes non-GAAP earnings better reflect operating performance. "
     "We adjust for stock-based compensation and restructuring charges. "
@@ -56,6 +64,13 @@ def make_financials_corpus(year=2025, ticker="TSLA"):
     ]
 
 
+def make_strategy_corpus(year=2025, ticker="TSLA"):
+    return [
+        SourceChunk(text=ITEM_5_TEXT, item="ITEM 5", fiscal_year=year, ticker=ticker, filing="10-K"),
+        SourceChunk(text=ITEM_7_TEXT, item="ITEM 7", fiscal_year=year, ticker=ticker, filing="10-K"),
+    ]
+
+
 def valid_section_json(content=ITEM_1_TEXT.split(". ")[0] + ".", evidence=None, refs=(1,)):
     return json.dumps(
         {
@@ -72,6 +87,13 @@ def valid_financials_section_json():
     return valid_section_json(
         content=ITEM_7_TEXT.split(". ")[0] + ".",
         evidence=[ITEM_7_TEXT.split(". ")[0] + "."],
+    )
+
+
+def valid_strategy_section_json():
+    return valid_section_json(
+        content=ITEM_5_TEXT.split(". ")[0] + ".",
+        evidence=[ITEM_5_TEXT.split(". ")[0] + "."],
     )
 
 

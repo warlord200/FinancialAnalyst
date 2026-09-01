@@ -183,10 +183,7 @@ class ArtifactGenerator:
     ) -> Artifact:
         ticker = ticker.upper()
         if fiscal_year is None:
-            years = self.retriever.fiscal_years(ticker)
-            if not years:
-                raise NoSourceError(ticker, "no filings indexed")
-            fiscal_year = max(years)
+            fiscal_year = self._latest_year_with_sources(ticker, sections)
 
         generated: list[ArtifactSection] = []
         for spec in sections:
@@ -211,6 +208,50 @@ class ArtifactGenerator:
             ),
             generated_at=datetime.now(timezone.utc).isoformat(),
             sections=generated,
+        )
+
+    def _latest_year_with_sources(
+        self,
+        ticker: str,
+        sections: list[SectionSpec] | tuple[SectionSpec, ...],
+    ) -> int:
+        """Pick the fiscal year to draft the artifact from.
+
+        Years are considered newest first. The first year that has source
+        chunks for *every* requested item wins, so a partial year (for
+        example a fiscal year that only holds 10-Qs, which carry no Item
+        7/8, or a 10-Q whose Item 5 is "Other Information" rather than the
+        market-for-shares item) is skipped in favour of the most recent
+        complete annual filing.
+        """
+        years = self.retriever.fiscal_years(ticker)
+        if not years:
+            raise NoSourceError(ticker, "no filings indexed")
+        if not sections:
+            raise NoSourceError(ticker, "no sections requested")
+        requested_items = list(
+            dict.fromkeys(item for spec in sections for item in spec.items)
+        )
+        for year in sorted(years, reverse=True):
+            if not self._year_has_all_items(ticker, sections[0].query, requested_items, year):
+                continue
+            return year
+        raise NoSourceError(ticker, "no source chunks for the requested items")
+
+    def _year_has_all_items(
+        self, ticker: str, query: str, items: list[str], fiscal_year: int
+    ) -> bool:
+        if not items:
+            return bool(
+                self.retriever.retrieve(
+                    ticker, query, items=None, fiscal_year=fiscal_year, top_k=1
+                )
+            )
+        return all(
+            self.retriever.retrieve(
+                ticker, query, items=[item], fiscal_year=fiscal_year, top_k=1
+            )
+            for item in items
         )
 
     def _draft_section(

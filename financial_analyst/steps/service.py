@@ -13,6 +13,8 @@ from financial_analyst.steps.financials import ARTIFACT_TYPE as FINANCIALS_TYPE
 from financial_analyst.steps.financials import build_financials
 from financial_analyst.steps.generation import NoSourceError
 from financial_analyst.steps.one_pager import build_one_pager
+from financial_analyst.steps.strategy import ARTIFACT_TYPE as STRATEGY_TYPE
+from financial_analyst.steps.strategy import build_strategy
 
 
 class StepsService:
@@ -92,4 +94,28 @@ class StepsService:
             return None
         if self.drafts is not None:
             self.drafts.set_draft(ticker, FINANCIALS_TYPE, artifact.model_dump())
+        return {"ticker": ticker, "artifact": artifact, "cached": False}
+
+    def strategy(self, email: str, ticker: str) -> dict | None:
+        """Generate (or serve from cache) the Step 4 Strategy artifact.
+
+        Returns None when the ticker has no numbers or no indexed corpus, so
+        the caller can 404. The plan, capex, and financing sections are
+        drafted over Item 5/7; the long-run returns table comes from the
+        numbers layer. The email is unused for now because the draft is
+        shared.
+        """
+        ticker = ticker.upper()
+        cached = self.drafts.get_draft(ticker, STRATEGY_TYPE) if self.drafts else None
+        if cached is not None:
+            return {"ticker": ticker, "artifact": cached, "cached": True}
+        numbers = self.numbers.get(ticker)
+        if numbers is None or self.generator is None:
+            return None
+        try:
+            artifact = build_strategy(self.generator, ticker, numbers["financials"])
+        except NoSourceError:
+            return None
+        if self.drafts is not None:
+            self.drafts.set_draft(ticker, STRATEGY_TYPE, artifact.model_dump())
         return {"ticker": ticker, "artifact": artifact, "cached": False}

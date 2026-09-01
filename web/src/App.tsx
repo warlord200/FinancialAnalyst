@@ -9,6 +9,7 @@ import {
   getNumbers,
   getOnePager,
   getQuota,
+  getStrategy,
   getToken,
   ingestTicker,
   listIngested,
@@ -31,6 +32,7 @@ import {
   OnePagerResponse,
   QuotaStatus,
   SourceTag,
+  StrategyResponse,
   TableUnit,
 } from "./api";
 
@@ -435,6 +437,26 @@ function FinancialsCard({ response }: { response: FinancialsResponse }) {
   );
 }
 
+function StrategyCard({ response }: { response: StrategyResponse }) {
+  const { artifact, cached } = response;
+  return (
+    <article>
+      <div className="report-meta">
+        <span className="meta-text">
+          Step 4 · Strategy · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
+          {artifact.scope.items.join(", ")}
+        </span>
+        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+      </div>
+      {artifact.returns && <FinancialsTableCard table={artifact.returns} />}
+      {artifact.sections.map((section) => (
+        <ArtifactSectionCard key={section.key} section={section} />
+      ))}
+    </article>
+  );
+}
+
 function AuthPanel({
   onAuthenticated,
 }: {
@@ -538,6 +560,11 @@ export default function App() {
   const [financialsTicker, setFinancialsTicker] = useState("");
   const [financialsError, setFinancialsError] = useState("");
   const [financialsLoading, setFinancialsLoading] = useState(false);
+
+  const [strategy, setStrategy] = useState<StrategyResponse | null>(null);
+  const [strategyTicker, setStrategyTicker] = useState("");
+  const [strategyError, setStrategyError] = useState("");
+  const [strategyLoading, setStrategyLoading] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -725,6 +752,22 @@ export default function App() {
     }
   }
 
+  async function loadStrategy(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setStrategyTicker(s);
+    setStrategyLoading(true);
+    setStrategyError("");
+    try {
+      await ensureNumbers(s);
+      setStrategy(await getStrategy(s));
+    } catch (e) {
+      setStrategyError(e instanceof Error ? e.message : "Failed to load strategy");
+    } finally {
+      setStrategyLoading(false);
+    }
+  }
+
   return (
     <div className="app">
       {!user ? (
@@ -896,6 +939,30 @@ export default function App() {
             {financialsLoading && <div className="status">Drafting Financials…</div>}
             {financialsError && <div className="error-banner">{financialsError}</div>}
             {financials && <FinancialsCard response={financials} />}
+          </main>
+        </div>
+      ) : view === "step4" ? (
+        <div className="layout">
+          <main className="content">
+            <div className="search">
+              <input
+                value={strategyTicker}
+                onChange={(e) => setStrategyTicker(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadStrategy(strategyTicker)}
+                placeholder="e.g. TSLA"
+                className="ticker-input"
+              />
+              <button
+                onClick={() => loadStrategy(strategyTicker)}
+                disabled={strategyLoading}
+                className="primary"
+              >
+                Load
+              </button>
+            </div>
+            {strategyLoading && <div className="status">Drafting Strategy…</div>}
+            {strategyError && <div className="error-banner">{strategyError}</div>}
+            {strategy && <StrategyCard response={strategy} />}
           </main>
         </div>
       ) : view === "numbers" ? (
