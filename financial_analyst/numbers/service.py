@@ -38,9 +38,7 @@ class NumbersService:
 
     def refresh(self, ticker: str) -> dict:
         ticker = ticker.upper()
-        cik = self.downloader.get_cik(ticker)
-        facts = self.facts_fetcher(cik)
-        self.store.set_facts(ticker, facts)
+        self._fetch_and_store_facts(ticker)
 
         try:
             price = self.price_client.fetch_current(ticker)
@@ -51,6 +49,29 @@ class NumbersService:
         if price is not None:
             self.price_store.set_fetched(ticker, price, history)
         return self.get(ticker)
+
+    def resolve(self, ticker: str) -> int:
+        """Resolve a ticker to its SEC CIK, raising TickerNotFoundError when
+        SEC EDGAR does not know it."""
+        return self.downloader.get_cik(ticker.upper())
+
+    def ensure_facts(self, ticker: str, cik: int | None = None) -> dict:
+        """Make sure the ticker's XBRL company-facts are cached, fetching
+        them when they are not.
+
+        The peer scorecard uses this to pull a peer's numbers into the
+        shared store on first use. Unlike :meth:`refresh` it does not touch
+        the price layer, so a peer needs no market price to be comparable.
+        """
+        ticker = ticker.upper()
+        if self.store.get(ticker) is None:
+            self._fetch_and_store_facts(ticker, cik)
+        return self.get(ticker)
+
+    def _fetch_and_store_facts(self, ticker: str, cik: int | None = None) -> None:
+        if cik is None:
+            cik = self.downloader.get_cik(ticker)
+        self.store.set_facts(ticker, self.facts_fetcher(cik))
 
     def get(self, ticker: str) -> dict | None:
         ticker = ticker.upper()

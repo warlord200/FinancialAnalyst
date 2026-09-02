@@ -25,7 +25,7 @@ from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
 from financial_analyst.steps.retrieval import ScopedRetriever, reranker_from_env
 from financial_analyst.steps.service import StepsService
-from financial_analyst.steps.state import StepStateStore
+from financial_analyst.steps.state import PeerStateStore, StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
 
 _analyzer: Analyzer | None = None
@@ -251,5 +251,6 @@ def get_steps_service() -> StepsService:
         generator=generator,
         draft_store=DraftStore("./storage/drafts.json"),
         chat_service=chat_service,
+        peers_store=PeerStateStore("./storage/steps.db"),
     )
     return _steps_service

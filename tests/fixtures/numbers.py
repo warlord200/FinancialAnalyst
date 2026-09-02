@@ -32,6 +32,57 @@ FULL_TABLE = {
     "PaymentsToAcquirePropertyPlantAndEquipment": {y: 12 for y in YEARS},
 }
 
+# Peer facts for the scorecard: deliberately different round numbers so a
+# comparison is easy to check. F is richer and more profitable than TSLA
+# (revenue 100 -> 300 over FY2020..FY2025, gross margin 40%, net margin
+# 20%); GM is bigger but shrinking (revenue 500 -> 400, net margin 5%,
+# current ratio below 1).
+F_TABLE = {
+    "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        y: 100 + 40 * (y - 2020) for y in YEARS
+    },
+    "GrossProfit": {y: 0.40 * (100 + 40 * (y - 2020)) for y in YEARS},
+    "OperatingIncomeLoss": {y: 0.25 * (100 + 40 * (y - 2020)) for y in YEARS},
+    "NetIncomeLoss": {y: 0.20 * (100 + 40 * (y - 2020)) for y in YEARS},
+    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {
+        y: 1.3 * 0.20 * (100 + 40 * (y - 2020)) for y in YEARS
+    },
+    "IncomeTaxExpenseBenefit": {y: 0.3 * 0.20 * (100 + 40 * (y - 2020)) for y in YEARS},
+    "Assets": {y: 400 for y in YEARS},
+    "AssetsCurrent": {y: 200 for y in YEARS},
+    "LiabilitiesCurrent": {y: 100 for y in YEARS},
+    "Liabilities": {y: 200 for y in YEARS},
+    "StockholdersEquity": {y: 200 for y in YEARS},
+    "LongTermDebt": {y: 80 for y in YEARS},
+    "LongTermDebtCurrent": {y: 20 for y in YEARS},
+    "CashAndCashEquivalentsAtCarryingValue": {y: 50 for y in YEARS},
+    "NetCashProvidedByUsedInOperatingActivities": {y: 60 for y in YEARS},
+    "PaymentsToAcquirePropertyPlantAndEquipment": {y: 20 for y in YEARS},
+}
+
+GM_TABLE = {
+    "RevenueFromContractWithCustomerExcludingAssessedTax": {
+        y: 500 - 20 * (y - 2020) for y in YEARS
+    },
+    "GrossProfit": {y: 0.30 * (500 - 20 * (y - 2020)) for y in YEARS},
+    "OperatingIncomeLoss": {y: 0.10 * (500 - 20 * (y - 2020)) for y in YEARS},
+    "NetIncomeLoss": {y: 0.05 * (500 - 20 * (y - 2020)) for y in YEARS},
+    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {
+        y: 1.3 * 0.05 * (500 - 20 * (y - 2020)) for y in YEARS
+    },
+    "IncomeTaxExpenseBenefit": {y: 0.3 * 0.05 * (500 - 20 * (y - 2020)) for y in YEARS},
+    "Assets": {y: 1000 for y in YEARS},
+    "AssetsCurrent": {y: 300 for y in YEARS},
+    "LiabilitiesCurrent": {y: 400 for y in YEARS},
+    "Liabilities": {y: 700 for y in YEARS},
+    "StockholdersEquity": {y: 300 for y in YEARS},
+    "LongTermDebt": {y: 300 for y in YEARS},
+    "LongTermDebtCurrent": {y: 0 for y in YEARS},
+    "CashAndCashEquivalentsAtCarryingValue": {y: 100 for y in YEARS},
+    "NetCashProvidedByUsedInOperatingActivities": {y: 80 for y in YEARS},
+    "PaymentsToAcquirePropertyPlantAndEquipment": {y: 30 for y in YEARS},
+}
+
 
 class FakeDownloader:
     def __init__(self, ciks):
@@ -54,6 +105,19 @@ class FakeFactsFetcher:
     def __call__(self, cik):
         self.calls += 1
         return self.facts
+
+
+class ByCikFactsFetcher:
+    """A facts fetcher that returns a different company-facts payload per
+    CIK, so peer scorecard tests compare genuinely different numbers."""
+
+    def __init__(self, by_cik):
+        self.by_cik = by_cik
+        self.calls = []
+
+    def __call__(self, cik):
+        self.calls.append(cik)
+        return self.by_cik[cik]
 
 
 class FakePriceClient:

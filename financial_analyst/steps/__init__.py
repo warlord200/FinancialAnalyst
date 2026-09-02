@@ -1,6 +1,9 @@
 """The six dossier steps. T4 implements step 1 (the one-pager); T5 adds
 the source-tagged artifact framework and step 2 (Business & SWOT); T6 adds
-step 3 (Financials); T7 adds step 4 (Strategy); T8 adds step-scoped chat.
+step 3 (Financials); T7 adds step 4 (Strategy); T8 adds step-scoped chat;
+T10 adds the step 3 peer scorecard (per-user peer lists compared against
+the target on growth, margins, debt, and returns, all from the numbers
+layer).
 
 ``STEP_SCOPES`` maps each step that drafts over the corpus to the filing
 Items it draws on: step 2 reads Item 1/1A, step 3 reads Item 7/8, step 4

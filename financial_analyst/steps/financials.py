@@ -155,7 +155,7 @@ class FinancialsArtifact(Artifact):
     tables: list[FinancialTable] = Field(default_factory=list)
 
 
-def _fact_tags(pairs: tuple[tuple[str, str], ...]) -> list[SourceTag]:
+def fact_tags(pairs: tuple[tuple[str, str], ...]) -> list[SourceTag]:
     tags = []
     for section, line in pairs:
         tags.extend(STATEMENT_LINES[section].get(line, []))
@@ -179,7 +179,7 @@ def _statement_table(
             TableRow(
                 label=LINE_LABELS.get(line, line),
                 values=_year_values(values, columns),
-                sources=_fact_tags(((section, line),)),
+                sources=fact_tags(((section, line),)),
             )
         )
     return FinancialTable(key=key, title=title, columns=columns, rows=rows, unit="percent")
@@ -202,7 +202,7 @@ def _ratio_table(
             TableRow(
                 label=RATIO_LABELS.get(name, name),
                 values=_year_values(values, columns),
-                sources=_fact_tags(RATIO_FACTS[name]),
+                sources=fact_tags(RATIO_FACTS[name]),
             )
         )
     return FinancialTable(key=key, title=title, columns=columns, rows=rows, unit=unit)
@@ -218,7 +218,7 @@ def _cagr_table(cagr: dict[str, dict[str, float]]) -> FinancialTable:
             TableRow(
                 label=LINE_LABELS.get(line, line),
                 values=_year_values(values, list(CAGR_SPANS)),
-                sources=_fact_tags((("income_statement", line),)),
+                sources=fact_tags((("income_statement", line),)),
             )
         )
     return FinancialTable(

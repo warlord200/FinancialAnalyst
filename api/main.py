@@ -46,6 +46,10 @@ class ChatRequest(BaseModel):
     search_all: bool = False
 
 
+class PeersRequest(BaseModel):
+    peers: list[str]
+
+
 def _no_source_detail(ticker: str) -> str:
     return (
         f"No numbers or indexed source material for {ticker}; "
@@ -276,6 +280,48 @@ def create_app() -> FastAPI:
                 detail=_no_source_detail(ticker),
             )
         return result
+
+    @app.get("/api/steps/{ticker}/peers")
+    def get_peers(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_steps_service().peers(user["email"], ticker)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.put("/api/steps/{ticker}/peers")
+    def set_peers(
+        ticker: str,
+        body: PeersRequest,
+        user: CurrentUser,
+        quota: dict = Depends(require_quota(RESOURCE_ANALYSES)),
+    ):
+        ticker = ticker.upper()
+        try:
+            result = _get_steps_service().set_peers(user["email"], ticker, body.peers)
+        except TickerNotFoundError as exc:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
+            raise HTTPException(status_code=404, detail=str(exc))
+        except (SECDownloadError, XBRLEdgarError):
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
+            raise HTTPException(status_code=503, detail="SEC EDGAR unavailable, try again later")
+        if result is None:
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        if not result.get("fetched"):
+            _get_quota_service().refund(user, RESOURCE_ANALYSES)
+        return result
+
+    @app.delete("/api/steps/{ticker}/peers")
+    def clear_peers(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        return _get_steps_service().clear_peers(user["email"], ticker)
 
     @app.post("/api/ingest/{ticker}")
     def ingest(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):

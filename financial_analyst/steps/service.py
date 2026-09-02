@@ -13,6 +13,7 @@ from financial_analyst.steps.financials import ARTIFACT_TYPE as FINANCIALS_TYPE
 from financial_analyst.steps.financials import build_financials
 from financial_analyst.steps.generation import NoSourceError
 from financial_analyst.steps.one_pager import build_one_pager
+from financial_analyst.steps.peers import build_scorecard
 from financial_analyst.steps.strategy import ARTIFACT_TYPE as STRATEGY_TYPE
 from financial_analyst.steps.strategy import build_strategy
 
@@ -25,12 +26,14 @@ class StepsService:
         generator=None,
         draft_store=None,
         chat_service=None,
+        peers_store=None,
     ) -> None:
         self.numbers = numbers_service
         self.state = state_store
         self.generator = generator
         self.drafts = draft_store
         self.chat_service = chat_service
+        self.peers_store = peers_store
 
     def one_pager(self, email: str, ticker: str) -> dict | None:
         ticker = ticker.upper()
@@ -141,3 +144,67 @@ class StepsService:
         if self.chat_service is None:
             return None
         return self.chat_service.answer(ticker, question, step, search_all)
+
+    def peers(self, email: str, ticker: str) -> dict | None:
+        """Return the user's peer list for a company plus the scorecard
+        comparing the target against those peers' latest XBRL figures.
+
+        Returns None when the target has no numbers (nothing to compare), so
+        the caller can 404. The peer list itself is private per user; the
+        numbers they are compared against are the shared numbers layer.
+        """
+        ticker = ticker.upper()
+        if self.numbers.get(ticker) is None:
+            return None
+        peers = self.peers_store.list_peers(email, ticker) if self.peers_store else []
+        return self._peer_view(ticker, peers)
+
+    def set_peers(self, email: str, ticker: str, peers: list[str]) -> dict | None:
+        """Set the user's peer list for a company.
+
+        Every peer ticker is validated against SEC EDGAR before anything is
+        fetched, and any peer whose XBRL facts are not yet in the shared
+        numbers store is pulled in on first use. Returns None when the
+        target has no numbers. The returned dict carries ``fetched`` — the
+        peer tickers whose facts were pulled — so callers can decide whether
+        the request consumed quota.
+        """
+        ticker = ticker.upper()
+        if self.numbers.get(ticker) is None:
+            return None
+        cleaned: list[str] = []
+        for peer in (str(p).strip().upper() for p in (peers or [])):
+            if peer and peer != ticker and peer not in cleaned:
+                cleaned.append(peer)
+        new = [peer for peer in cleaned if self.numbers.get(peer) is None]
+        ciks = {peer: self.numbers.resolve(peer) for peer in new}
+        for peer in new:
+            self.numbers.ensure_facts(peer, ciks[peer])
+        if self.peers_store is not None:
+            self.peers_store.set_peers(email, ticker, cleaned)
+        return {**self._peer_view(ticker, cleaned), "fetched": new}
+
+    def clear_peers(self, email: str, ticker: str) -> dict:
+        """Forget every peer the user picked for a company."""
+        ticker = ticker.upper()
+        if self.peers_store is not None:
+            self.peers_store.set_peers(email, ticker, [])
+        return self._peer_view(ticker, [])
+
+    def _peer_view(self, ticker: str, peers: list[str]) -> dict:
+        target = self.numbers.get(ticker)
+        compared = []
+        for peer in peers:
+            entry = self.numbers.get(peer)
+            if entry is not None:
+                compared.append((peer, entry["financials"]))
+        scorecard = (
+            build_scorecard(ticker, target["financials"], compared)
+            if compared
+            else []
+        )
+        return {
+            "ticker": ticker,
+            "peers": list(peers),
+            "scorecard": [table.model_dump() for table in scorecard],
+        }

@@ -87,3 +87,19 @@ button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; colo
 .chat-text { margin: 4px 0; line-height: 1.5; white-space: pre-wrap; }
 .chat-input-row { display: flex; gap: 8px; }
 .chat-input-row input { flex: 1; padding: 10px 12px; font-size: 1rem; }
+
+.peer-panel {
+  margin-top: 24px; padding-top: 16px; border-top: 1px solid #e8e8ed;
+}
+.peer-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.peer-add-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+.peer-add-row .ticker-input { width: 180px; }
+.peer-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.peer-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px; font-weight: 600;
+  background: #e8f0fe; color: #0a66c2;
+}
+.peer-chip .link-button { font-size: 1rem; line-height: 1; }

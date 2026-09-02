@@ -192,6 +192,12 @@ export interface StrategyResponse {
   cached: boolean;
 }
 
+export interface PeerScorecardResponse {
+  ticker: string;
+  peers: string[];
+  scorecard: FinancialTable[];
+}
+
 export interface ChatSource {
   text: string;
   item: string | null;
@@ -291,6 +297,24 @@ export function getFinancials(ticker: string) {
 
 export function getStrategy(ticker: string) {
   return request<StrategyResponse>(`/api/steps/${ticker}/strategy`);
+}
+
+export function getPeers(ticker: string) {
+  return request<PeerScorecardResponse>(`/api/steps/${ticker}/peers`);
+}
+
+export function setPeers(ticker: string, peers: string[]) {
+  return request<PeerScorecardResponse>(`/api/steps/${ticker}/peers`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ peers }),
+  });
+}
+
+export function clearPeers(ticker: string) {
+  return request<PeerScorecardResponse>(`/api/steps/${ticker}/peers`, {
+    method: "DELETE",
+  });
 }
 
 export function chatStep(
