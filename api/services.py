@@ -23,7 +23,7 @@ from financial_analyst.reader.sec_html_reader import SECHtmlReader
 from financial_analyst.steps.chat import ChatService
 from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
-from financial_analyst.steps.retrieval import ScopedRetriever
+from financial_analyst.steps.retrieval import ScopedRetriever, reranker_from_env
 from financial_analyst.steps.service import StepsService
 from financial_analyst.steps.state import StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
@@ -240,7 +240,8 @@ def get_steps_service() -> StepsService:
         return _steps_service
     _ensure_models()
     retriever = ScopedRetriever(
-        CompanyIndex(chroma_path="./chroma_db", storage_base="./storage")
+        CompanyIndex(chroma_path="./chroma_db", storage_base="./storage"),
+        reranker=reranker_from_env(),
     )
     generator = ArtifactGenerator(retriever, Settings.llm)
     chat_service = ChatService(retriever, Settings.llm)

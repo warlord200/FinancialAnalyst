@@ -99,6 +99,8 @@ qa_dataset = generate_qa_embedding_pairs(
 - **LlamaIndex** , RAG orchestration, agent, and index management
 - **LiteParse** , Open-source document parser
 - **ChromaDB** , Vector store for `VectorStoreIndex`
+- **rank_bm25** , lexical BM25 leg of hybrid retrieval (fused by reciprocal rank)
+- **bge-reranker-v2-m3** , optional cross-encoder reranker over fused candidates
 - **Deepseek / LLM** , Language model backend
 
 ---
@@ -107,6 +109,33 @@ qa_dataset = generate_qa_embedding_pairs(
 
 This project prioritises correctness and honest documentation of engineering challenges. `eval_utils.py` contains all monkey-patched workarounds with inline comments explaining why each exists. Issues with upstream libraries are noted with version references where applicable.
 
+Retrieval is **hybrid by default** (`ScopedRetriever` in `financial_analyst/steps/retrieval.py`): a dense (embedding) leg and a BM25 keyword leg over the same scoped corpus are fused with reciprocal rank fusion (RRF). A cross-encoder reranker can be layered on top by setting `RERANKER_MODEL` (e.g. `BAAI/bge-reranker-v2-m3`); unset means no reranking. The measured effect of each stage is below.
+
 ## METRICS
-19/7/2026| MRR: 0.589 | HIT_RATE: 0.676
-23/7/2026| MRR: 0.767 | HIT_RATE: 0.851
+
+Historical baselines (prior harness, `tests/test_llamaindex_agent.py`, embed model **Octen/Octen-Embedding-4B-INT8** on GPU, `top_k=4`):
+
+```
+19/7/2026 | MRR: 0.589 | HIT_RATE: 0.676
+23/7/2026 | MRR: 0.767 | HIT_RATE: 0.851
+```
+
+Re-measurement for hybrid + reranker (2/9/2026). The QA datasets in `storage/evals/` are re-embedded with the configured embed model so everything runs on CPU; the Octen model needs a GPU, and this dev box only has fully-cached CPU models, so the run below uses **BAAI/bge-small-en-v1.5** with `top_k=4`. Same harness, same datasets, all configs measured side by side. Two caveats make these **not directly comparable** to the GPU baselines above: the embed model differs (bge-small-en-v1.5 is weaker than Octen), and the corpus is the QA-dataset chunks only, so the numbers sit on a smaller search space than the old harness measured.
+
+| config | corpus | queries | MRR | hit_rate | ndcg |
+|---|---|---|---|---|---|
+| vector | Microsoft | 168 | 0.676 | 0.804 | 0.708 |
+| hybrid | Microsoft | 168 | 0.725 | 0.899 | 0.769 |
+| vector | Tesla | 163 | 0.713 | 0.840 | 0.745 |
+| hybrid | Tesla | 163 | 0.785 | 0.914 | 0.818 |
+
+Matched 40-query subset per corpus (seeded), hybrid vs reranked hybrid:
+
+| config | queries | MRR | hit_rate | ndcg |
+|---|---|---|---|---|
+| hybrid | 80 | 0.792 | 0.888 | 0.816 |
+| hybrid + rerank | 80 | 0.856 | 0.913 | 0.871 |
+
+**Read on these numbers.** On the full 331-query corpora, hybrid (dense + BM25/RRF) is a clear, consistent win over pure vector search: **+0.05–0.07 MRR, +0.07–0.10 hit rate, +0.06–0.07 NDCG** on both companies, so hybrid is the production retrieval path. On the matched 80-query subset, adding the cached open-source reranker (`BAAI/bge-reranker-v2-m3`) on top of hybrid is a further, smaller gain over hybrid on that same subset: **+0.065 MRR, +0.025 hit rate, +0.055 NDCG**. That the reranker helps at all contradicts the earlier assumption (comment in the old eval script, 23/7) that open-source rerankers are not usable on financial data.
+
+**Decision: keep both.** Hybrid is on by default. The reranker is kept behind `RERANKER_MODEL` rather than forced on: it adds a ~2.3 GB cross-encoder and ~1 s/query on CPU, which strains the 2–4 GB student-hosting budget in `docs/research/student-hosting-options-2026.md`; enable it when latency/RAM allow. (Latency note: hybrid itself adds a per-scope BM25 index that is built on the first query in that scope and cached thereafter — the search-everything scope is the whole corpus — plus a keyword pass per query; this has not been latency-profiled.) A fuller run on the production embed model (bge-m3 or Octen on GPU) and a standardised comparison method is the T13 eval harness's job.
