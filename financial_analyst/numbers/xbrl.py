@@ -21,33 +21,70 @@ def fetch_company_facts(
     return resp.json()
 
 
+def _annual_rows_for_tag(facts: dict, tag: str) -> dict[int, dict]:
+    """Map fiscal year -> chosen fact row for one concept.
+
+    Only 10-K annual (fp == "FY") entries count. A fiscal year is identified
+    by the year its period ends in (the row's own ``end`` date), not by the
+    accession-level ``fy`` attribute: SEC stamps every comparative period in
+    a 10-K with that accession's ``fy``/``form``/``filed``, so a single 10-K
+    can carry two or three comparative fiscal years that all share one ``fy``.
+    Grouping by ``fy`` would land those values one to two years late. When a
+    fiscal year has several filings (restatements), the latest filed row
+    wins.
+    """
+    concept = facts.get(tag)
+    if not concept:
+        return {}
+    best: dict[int, dict] = {}
+    for unit in concept.get("units", {}).values():
+        for item in unit:
+            form = item.get("form", "")
+            if not form.startswith("10-K") or item.get("fp") != "FY":
+                continue
+            end = item.get("end")
+            if not end:
+                continue
+            fiscal_year = int(end[:4])
+            filed = item.get("filed", "")
+            current = best.get(fiscal_year)
+            if current is None or filed > current["filed"]:
+                best[fiscal_year] = {
+                    "val": float(item["val"]),
+                    "end": end,
+                    "filed": filed,
+                }
+    return best
+
+
+def annual_rows(company_facts: dict, tags: list[str]) -> dict[int, dict]:
+    """Map fiscal year -> chosen fact row, merging the candidate tags.
+
+    Each row carries ``val`` (the annual value), ``end`` (the period end
+    date), and ``filed``. The first tag is preferred: fallback tags only fill
+    fiscal years the primary tag does not cover. ``annual_values`` and the
+    ``fiscal_year_ends`` map are both projections of this selection, so a
+    value and its fiscal-year-end date always come from the same row.
+    """
+    facts = company_facts.get("facts", {}).get(US_GAAP, {})
+    merged: dict[int, dict] = {}
+    for tag in tags:
+        for fiscal_year, row in _annual_rows_for_tag(facts, tag).items():
+            if fiscal_year not in merged:
+                merged[fiscal_year] = row
+    return merged
+
+
 def annual_values(company_facts: dict, tags: list[str]) -> dict[int, float]:
     """Map fiscal year -> annual value, merging the candidate tags.
 
-    Only 10-K annual (fp == "FY") entries count. When a fiscal year has
-    several filings (restatements), the latest filed entry wins. The first
-    tag is preferred: fallback tags only fill fiscal years the primary tag
-    does not cover.
+    Only 10-K annual (fp == "FY") entries count. Each value is attributed to
+    the fiscal year its own period ends in (the row's ``end`` year, not the
+    accession ``fy``). When a fiscal year has several filings
+    (restatements), the latest filed entry wins. The first tag is preferred:
+    fallback tags only fill fiscal years the primary tag does not cover.
     """
-    facts = company_facts.get("facts", {}).get(US_GAAP, {})
-    result: dict[int, float] = {}
-    for tag in tags:
-        concept = facts.get(tag)
-        if not concept:
-            continue
-        by_year: dict[int, tuple[str, float]] = {}
-        for unit in concept.get("units", {}).values():
-            for item in unit:
-                form = item.get("form", "")
-                if not form.startswith("10-K") or item.get("fp") != "FY":
-                    continue
-                fy = item.get("fy")
-                if fy is None:
-                    continue
-                filed = item.get("filed", "")
-                if fy not in by_year or filed > by_year[fy][0]:
-                    by_year[fy] = (filed, float(item["val"]))
-        for fy, (_, val) in by_year.items():
-            if fy not in result:
-                result[fy] = val
-    return result
+    return {
+        fiscal_year: row["val"]
+        for fiscal_year, row in annual_rows(company_facts, tags).items()
+    }

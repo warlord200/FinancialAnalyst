@@ -1,31 +1,8 @@
 import pytest
 
 from financial_analyst.numbers.statements import compute
+from tests.fixtures.numbers import FULL_TABLE, REV, YEARS
 from tests.fixtures.xbrl_facts import make_facts
-
-YEARS = [2020, 2021, 2022, 2023, 2024, 2025]
-REV = {y: 100 + 10 * (y - 2020) for y in YEARS}
-
-FULL_TABLE = {
-    "RevenueFromContractWithCustomerExcludingAssessedTax": REV,
-    "GrossProfit": {y: 0.25 * REV[y] for y in YEARS},
-    "OperatingIncomeLoss": {y: 0.15 * REV[y] for y in YEARS},
-    "NetIncomeLoss": {y: 0.10 * REV[y] for y in YEARS},
-    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest": {
-        y: 1.3 * 0.10 * REV[y] for y in YEARS
-    },
-    "IncomeTaxExpenseBenefit": {y: 0.3 * 0.10 * REV[y] for y in YEARS},
-    "Assets": {y: 300 + 10 * (y - 2020) for y in YEARS},
-    "AssetsCurrent": {y: 150 + 5 * (y - 2020) for y in YEARS},
-    "LiabilitiesCurrent": {y: 100 for y in YEARS},
-    "Liabilities": {y: 200 + 5 * (y - 2020) for y in YEARS},
-    "StockholdersEquity": {y: 100 + 5 * (y - 2020) for y in YEARS},
-    "LongTermDebt": {y: 50 for y in YEARS},
-    "LongTermDebtCurrent": {y: 10 for y in YEARS},
-    "CashAndCashEquivalentsAtCarryingValue": {y: 20 for y in YEARS},
-    "NetCashProvidedByUsedInOperatingActivities": {y: 30 + 2 * (y - 2020) for y in YEARS},
-    "PaymentsToAcquirePropertyPlantAndEquipment": {y: 12 for y in YEARS},
-}
 
 
 def test_compute_builds_multi_year_income_statement():
@@ -122,4 +99,79 @@ def test_compute_empty_facts():
         "common_size": {"income_statement": {}, "balance_sheet": {}},
         "ratios": {},
         "cagr": {},
+        "fiscal_year_ends": {},
+        "shares": {},
+        "depreciation_amortization": {},
     }
+
+
+def test_compute_emits_fiscal_year_end_dates():
+    result = compute(make_facts(FULL_TABLE))
+    assert result["fiscal_year_ends"] == {str(y): f"{y}-12-31" for y in YEARS}
+
+
+def test_compute_fiscal_year_ends_use_the_period_end_not_calendar_year():
+    """A September fiscal-year-end company (AAPL-like) must map each fiscal
+    year to the date its period actually ended on."""
+    facts = {
+        "cik": 320193,
+        "entityName": "APPLE, INC.",
+        "facts": {
+            "us-gaap": {
+                "RevenueFromContractWithCustomerExcludingAssessedTax": {
+                    "units": {
+                        "USD": [
+                            {
+                                "end": "2023-09-30",
+                                "val": 383285000000,
+                                "accn": "0001-2025",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "form": "10-K",
+                                "filed": "2025-10-31",
+                                "frame": "CY2023",
+                            },
+                            {
+                                "end": "2024-09-28",
+                                "val": 391035000000,
+                                "accn": "0001-2025",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "form": "10-K",
+                                "filed": "2025-10-31",
+                                "frame": "CY2024",
+                            },
+                            {
+                                "end": "2025-09-27",
+                                "val": 416161000000,
+                                "accn": "0001-2025",
+                                "fy": 2025,
+                                "fp": "FY",
+                                "form": "10-K",
+                                "filed": "2025-10-31",
+                                "frame": "CY2025",
+                            },
+                        ]
+                    }
+                }
+            }
+        },
+    }
+    result = compute(facts)
+    assert result["fiscal_year_ends"] == {
+        "2023": "2023-09-30",
+        "2024": "2024-09-28",
+        "2025": "2025-09-27",
+    }
+
+
+def test_compute_extracts_diluted_and_outstanding_shares():
+    result = compute(make_facts(FULL_TABLE))
+    assert result["shares"]["weighted_average_diluted"]["2025"] == 10.0
+    assert result["shares"]["outstanding"]["2025"] == 10.0
+    assert result["shares"]["weighted_average_diluted"]["2020"] == 10.0
+
+
+def test_compute_extracts_depreciation_amortization():
+    result = compute(make_facts(FULL_TABLE))
+    assert result["depreciation_amortization"]["2025"] == 5.0

@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Path, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -322,6 +322,65 @@ def create_app() -> FastAPI:
     def clear_peers(ticker: str, user: CurrentUser):
         ticker = ticker.upper()
         return _get_steps_service().clear_peers(user["email"], ticker)
+
+    @app.get("/api/steps/{ticker}/done")
+    def get_done_marks(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_steps_service().done_status(user["email"], ticker)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.post("/api/steps/{ticker}/done/{step}")
+    def mark_step_done(
+        ticker: str,
+        user: CurrentUser,
+        step: int = Path(ge=1, le=4),
+    ):
+        ticker = ticker.upper()
+        result = _get_steps_service().mark_done(user["email"], ticker, step)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.delete("/api/steps/{ticker}/done/{step}")
+    def unmark_step_done(
+        ticker: str,
+        user: CurrentUser,
+        step: int = Path(ge=1, le=4),
+    ):
+        ticker = ticker.upper()
+        result = _get_steps_service().unmark_done(user["email"], ticker, step)
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
+
+    @app.get("/api/steps/{ticker}/valuation")
+    def get_valuation(
+        ticker: str,
+        user: CurrentUser,
+        discount_rate: float | None = None,
+        growth: float | None = None,
+    ):
+        ticker = ticker.upper()
+        result = _get_steps_service().valuation(
+            user["email"], ticker, discount_rate=discount_rate, growth=growth
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No numbers for {ticker}; refresh numbers first.",
+            )
+        return result
 
     @app.post("/api/ingest/{ticker}")
     def ingest(ticker: str, user: CurrentUser, quota: dict = Depends(require_quota(RESOURCE_ANALYSES))):

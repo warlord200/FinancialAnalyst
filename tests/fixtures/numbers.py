@@ -30,6 +30,9 @@ FULL_TABLE = {
     "CashAndCashEquivalentsAtCarryingValue": {y: 20 for y in YEARS},
     "NetCashProvidedByUsedInOperatingActivities": {y: 30 + 2 * (y - 2020) for y in YEARS},
     "PaymentsToAcquirePropertyPlantAndEquipment": {y: 12 for y in YEARS},
+    "WeightedAverageNumberOfDilutedSharesOutstanding": {y: 10.0 for y in YEARS},
+    "CommonStockSharesOutstanding": {y: 10.0 for y in YEARS},
+    "DepreciationDepletionAndAmortization": {y: 5.0 for y in YEARS},
 }
 
 # Peer facts for the scorecard: deliberately different round numbers so a
@@ -58,6 +61,9 @@ F_TABLE = {
     "CashAndCashEquivalentsAtCarryingValue": {y: 50 for y in YEARS},
     "NetCashProvidedByUsedInOperatingActivities": {y: 60 for y in YEARS},
     "PaymentsToAcquirePropertyPlantAndEquipment": {y: 20 for y in YEARS},
+    "WeightedAverageNumberOfDilutedSharesOutstanding": {y: 12.0 for y in YEARS},
+    "CommonStockSharesOutstanding": {y: 12.0 for y in YEARS},
+    "DepreciationDepletionAndAmortization": {y: 10.0 for y in YEARS},
 }
 
 GM_TABLE = {
@@ -81,6 +87,9 @@ GM_TABLE = {
     "CashAndCashEquivalentsAtCarryingValue": {y: 100 for y in YEARS},
     "NetCashProvidedByUsedInOperatingActivities": {y: 80 for y in YEARS},
     "PaymentsToAcquirePropertyPlantAndEquipment": {y: 30 for y in YEARS},
+    "WeightedAverageNumberOfDilutedSharesOutstanding": {y: 20.0 for y in YEARS},
+    "CommonStockSharesOutstanding": {y: 20.0 for y in YEARS},
+    "DepreciationDepletionAndAmortization": {y: 30.0 for y in YEARS},
 }
 
 

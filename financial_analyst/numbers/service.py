@@ -39,15 +39,7 @@ class NumbersService:
     def refresh(self, ticker: str) -> dict:
         ticker = ticker.upper()
         self._fetch_and_store_facts(ticker)
-
-        try:
-            price = self.price_client.fetch_current(ticker)
-            history = self.price_client.fetch_history(ticker)
-        except PriceFetchError:
-            price = None
-            history = []
-        if price is not None:
-            self.price_store.set_fetched(ticker, price, history)
+        self._fetch_and_store_price(ticker)
         return self.get(ticker)
 
     def resolve(self, ticker: str) -> int:
@@ -67,6 +59,32 @@ class NumbersService:
         if self.store.get(ticker) is None:
             self._fetch_and_store_facts(ticker, cik)
         return self.get(ticker)
+
+    def ensure_price(self, ticker: str) -> None:
+        """Make sure the ticker's price and history are cached, fetching
+        them on first use.
+
+        Relative valuation compares peers at their own current prices, so a
+        peer only needs a market price when the valuation step runs. A price
+        outage leaves the peer comparable on fundamentals but without price
+        multiples (its ``price`` payload stays empty), mirroring how
+        :meth:`refresh` tolerates a price fetch failure.
+        """
+        ticker = ticker.upper()
+        if self.price_store.get(ticker) is not None:
+            return
+        self._fetch_and_store_price(ticker)
+
+    def _fetch_and_store_price(self, ticker: str) -> None:
+        """Fetch a current price and history and cache them, tolerating an
+        outage: a price fetch failure leaves the stored price untouched."""
+        try:
+            price = self.price_client.fetch_current(ticker)
+            history = self.price_client.fetch_history(ticker)
+        except PriceFetchError:
+            return
+        if price is not None:
+            self.price_store.set_fetched(ticker, price, history)
 
     def _fetch_and_store_facts(self, ticker: str, cik: int | None = None) -> None:
         if cik is None:

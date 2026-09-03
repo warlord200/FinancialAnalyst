@@ -198,6 +198,70 @@ export interface PeerScorecardResponse {
   scorecard: FinancialTable[];
 }
 
+export interface DoneMarksResponse {
+  ticker: string;
+  done: Record<string, boolean>;
+}
+
+export interface DcfSensitivityRow {
+  discount_rate: number;
+  values: Record<string, number | null>;
+}
+
+export interface DcfOutput {
+  base_fiscal_year: string;
+  fcf: number;
+  discount_rate: number;
+  growth: number;
+  net_debt: number;
+  enterprise_value: number;
+  equity_value: number;
+  equity_value_per_share: number | null;
+  sensitivity: {
+    discount_rates: number[];
+    growth_rates: number[];
+    rows: DcfSensitivityRow[];
+  };
+}
+
+export interface MarketMultiples {
+  fiscal_year: number | null;
+  price: number | null;
+  market_cap: number | null;
+  enterprise_value: number | null;
+  net_debt: number;
+  eps: number | null;
+  pe: number | null;
+  ebitda: number | null;
+  ev_ebitda: number | null;
+  fcf: number | null;
+  fcf_yield: number | null;
+}
+
+export interface HistoricalMultiples extends MarketMultiples {
+  fiscal_year: number;
+  end_date: string;
+}
+
+export interface PeerMultiples extends MarketMultiples {
+  ticker: string;
+}
+
+export interface ValuationOutput {
+  dcf: DcfOutput | null;
+  multiples: MarketMultiples;
+  history: HistoricalMultiples[];
+  peers: PeerMultiples[];
+}
+
+export interface ValuationResponse {
+  ticker: string;
+  locked: boolean;
+  done: Record<string, boolean>;
+  missing_steps: number[];
+  valuation?: ValuationOutput;
+}
+
 export interface ChatSource {
   text: string;
   item: string | null;
@@ -315,6 +379,32 @@ export function clearPeers(ticker: string) {
   return request<PeerScorecardResponse>(`/api/steps/${ticker}/peers`, {
     method: "DELETE",
   });
+}
+
+export function markStepDone(ticker: string, step: number) {
+  return request<DoneMarksResponse>(`/api/steps/${ticker}/done/${step}`, {
+    method: "POST",
+  });
+}
+
+export function clearStepDone(ticker: string, step: number) {
+  return request<DoneMarksResponse>(`/api/steps/${ticker}/done/${step}`, {
+    method: "DELETE",
+  });
+}
+
+export function getValuation(
+  ticker: string,
+  discountRate?: number,
+  growth?: number
+) {
+  const params = new URLSearchParams();
+  if (discountRate !== undefined) params.set("discount_rate", String(discountRate));
+  if (growth !== undefined) params.set("growth", String(growth));
+  const query = params.toString();
+  return request<ValuationResponse>(
+    `/api/steps/${ticker}/valuation${query ? `?${query}` : ""}`
+  );
 }
 
 export function chatStep(

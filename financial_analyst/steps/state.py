@@ -1,8 +1,9 @@
 """Per-user dossier step state, in SQLite.
 
 The one-pager content is shared (it is derived from the shared numbers
-layer), but the accept/reject gate on step 1 and the peer lists a user
-picks for a company are private to each user.
+layer), but the accept/reject gate on step 1, the peer lists a user picks
+for a company, and the done-marks that unlock valuation are private to each
+user.
 """
 
 from contextlib import closing
@@ -16,6 +17,14 @@ CREATE TABLE IF NOT EXISTS step_gates (
     ticker TEXT NOT NULL,
     step INTEGER NOT NULL,
     status TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (email, ticker, step)
+);
+
+CREATE TABLE IF NOT EXISTS step_done (
+    email TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    step INTEGER NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (email, ticker, step)
 );
@@ -66,6 +75,38 @@ class StepStateStore:
             )
             conn.commit()
         return {"step": step, "status": status, "updated_at": updated_at}
+
+    def get_done_steps(self, email: str, ticker: str) -> list[int]:
+        """The steps the user has marked done for a company, ascending."""
+        with closing(connect(self.db_path, SCHEMA)) as conn:
+            rows = conn.execute(
+                "SELECT step FROM step_done"
+                " WHERE email = ? AND ticker = ?"
+                " ORDER BY step",
+                (email, ticker.upper()),
+            ).fetchall()
+        return [row["step"] for row in rows]
+
+    def set_done(self, email: str, ticker: str, step: int) -> dict:
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with closing(connect(self.db_path, SCHEMA)) as conn:
+            conn.execute(
+                "INSERT INTO step_done (email, ticker, step, updated_at)"
+                " VALUES (?, ?, ?, ?)"
+                " ON CONFLICT(email, ticker, step)"
+                " DO UPDATE SET updated_at = excluded.updated_at",
+                (email, ticker.upper(), step, updated_at),
+            )
+            conn.commit()
+        return {"step": step, "done_at": updated_at}
+
+    def clear_done(self, email: str, ticker: str, step: int) -> None:
+        with closing(connect(self.db_path, SCHEMA)) as conn:
+            conn.execute(
+                "DELETE FROM step_done WHERE email = ? AND ticker = ? AND step = ?",
+                (email, ticker.upper(), step),
+            )
+            conn.commit()
 
 
 class PeerStateStore:

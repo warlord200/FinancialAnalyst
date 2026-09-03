@@ -6,7 +6,7 @@ always yields the same output, which is what makes every computed figure
 reproducible from the raw XBRL data.
 """
 
-from financial_analyst.numbers.xbrl import annual_values
+from financial_analyst.numbers.xbrl import annual_rows, annual_values
 
 REVENUE_TAGS = [
     "RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -34,6 +34,16 @@ CASH_TAGS = [
 ]
 OPERATING_CASH_FLOW_TAGS = ["NetCashProvidedByUsedInOperatingActivities"]
 CAPEX_TAGS = ["PaymentsToAcquirePropertyPlantAndEquipment"]
+DILUTED_SHARES_TAGS = [
+    "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "WeightedAverageNumberOfSharesOutstandingBasic",
+]
+OUTSTANDING_SHARES_TAGS = ["CommonStockSharesOutstanding"]
+DEPRECIATION_AMORTIZATION_TAGS = [
+    "DepreciationDepletionAndAmortization",
+    "DepreciationAndAmortization",
+    "Depreciation",
+]
 
 STATEMENT_LINES = {
     "income_statement": {
@@ -66,6 +76,39 @@ CAGR_LINES = ["revenue", "net_income"]
 
 def _str_year_map(values: dict[int, float]) -> dict[str, float]:
     return {str(fy): val for fy, val in sorted(values.items())}
+
+
+def _fiscal_year_end_map(company_facts: dict) -> dict[str, str]:
+    """Map fiscal year -> the date its period ended, from the raw facts.
+
+    Every fiscal year that appears in any statement line is present: the
+    value and its fiscal-year-end date come from the same underlying row, so
+    the valuation step can align a price history to a fiscal year without
+    assuming a calendar-year-end company.
+    """
+    tags = [
+        tag
+        for lines in STATEMENT_LINES.values()
+        for line_tags in lines.values()
+        for tag in line_tags
+    ]
+    rows = annual_rows(company_facts, tags)
+    return {str(fiscal_year): row["end"] for fiscal_year, row in sorted(rows.items())}
+
+
+def _shares_map(company_facts: dict) -> dict[str, dict[str, float]]:
+    """Per-fiscal-year share counts, keeping only the series present."""
+    series = {
+        "weighted_average_diluted": annual_values(
+            company_facts, DILUTED_SHARES_TAGS
+        ),
+        "outstanding": annual_values(company_facts, OUTSTANDING_SHARES_TAGS),
+    }
+    return {
+        name: _str_year_map(values)
+        for name, values in series.items()
+        if values
+    }
 
 
 def _compute_common_size(
@@ -234,4 +277,9 @@ def compute(company_facts: dict) -> dict:
         "common_size": common_size,
         "ratios": _compute_ratios(income, balance, cash_flow),
         "cagr": _compute_cagr(all_lines),
+        "fiscal_year_ends": _fiscal_year_end_map(company_facts),
+        "shares": _shares_map(company_facts),
+        "depreciation_amortization": _str_year_map(
+            annual_values(company_facts, DEPRECIATION_AMORTIZATION_TAGS)
+        ),
     }
