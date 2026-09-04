@@ -19,6 +19,11 @@ never reference material the model did not see:
 A section that fails enforcement is sent back once with the violations;
 if it still fails, generation raises :class:`ArtifactValidationError` so
 the caller can surface that the draft could not be grounded.
+
+The first draft and the repair attempt may run on different models. A
+caller can pass a fast ``llm`` for the initial draft and a ``repair_llm``
+for the repair attempt; when no ``repair_llm`` is given, the same model
+serves both attempts.
 """
 
 import json
@@ -202,9 +207,10 @@ def render_chunks(chunks) -> str:
 
 
 class ArtifactGenerator:
-    def __init__(self, retriever, llm, max_attempts: int = 2) -> None:
+    def __init__(self, retriever, llm, max_attempts: int = 2, repair_llm=None) -> None:
         self.retriever = retriever
         self.llm = llm
+        self.repair_llm = repair_llm or llm
         self.max_attempts = max_attempts
 
     def generate(
@@ -297,7 +303,8 @@ class ArtifactGenerator:
     ) -> ArtifactSection:
         prompt = self._section_prompt(ticker, fiscal_year, spec, chunks, prior)
         for attempt in range(self.max_attempts):
-            section, violations = self._attempt(spec, prompt, chunks)
+            llm = self.repair_llm if attempt else self.llm
+            section, violations = self._attempt(spec, prompt, chunks, llm=llm)
             if not violations:
                 return section
             if attempt < self.max_attempts - 1:
@@ -305,9 +312,10 @@ class ArtifactGenerator:
         raise ArtifactValidationError(spec.key, violations)
 
     def _attempt(
-        self, spec: SectionSpec, prompt: str, chunks
+        self, spec: SectionSpec, prompt: str, chunks, llm=None
     ) -> tuple[ArtifactSection | None, list[str]]:
-        text = self.llm.complete(prompt).text
+        llm = llm or self.llm
+        text = llm.complete(prompt).text
         data = parse_json(text)
         if data is None:
             return None, ["response was not valid JSON"]

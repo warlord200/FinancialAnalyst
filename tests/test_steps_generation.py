@@ -66,9 +66,9 @@ def bad_ref_json():
     )
 
 
-def make_generator(retriever=None, llm=None):
+def make_generator(retriever=None, llm=None, repair_llm=None):
     retriever = retriever or FakeRetriever()
-    return ArtifactGenerator(retriever, llm or FakeLLM())
+    return ArtifactGenerator(retriever, llm or FakeLLM(), repair_llm=repair_llm)
 
 
 class TestFramework:
@@ -144,6 +144,31 @@ class TestFramework:
         assert len(llm.prompts) == 2
         assert llm.prompts[1] != llm.prompts[0]
         assert "rejected" in llm.prompts[1]
+
+    def test_repair_attempt_uses_configured_repair_llm(self):
+        draft_llm = FakeLLM(fabricated_evidence_json())
+        repair_llm = FakeLLM(valid_section_json())
+        generator = make_generator(llm=draft_llm, repair_llm=repair_llm)
+        artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+        assert len(artifact.sections) == 1
+        assert draft_llm.calls == 1
+        assert repair_llm.calls == 1
+        assert "rejected" in repair_llm.prompts[0]
+
+    def test_repair_llm_untouched_when_first_draft_passes(self):
+        draft_llm = FakeLLM(valid_section_json())
+        repair_llm = FakeLLM(valid_section_json())
+        generator = make_generator(llm=draft_llm, repair_llm=repair_llm)
+        artifact = generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+        assert len(artifact.sections) == 1
+        assert draft_llm.calls == 1
+        assert repair_llm.calls == 0
+
+    def test_repair_llm_defaults_to_primary_llm(self):
+        llm = FakeLLM(fabricated_evidence_json(), valid_section_json())
+        generator = make_generator(llm=llm)
+        generator.generate("TSLA", "test_artifact", [SINGLE_SPEC])
+        assert llm.calls == 2
 
     def test_generate_raises_no_source_when_ticker_not_ingested(self):
         generator = make_generator(retriever=FakeRetriever(chunks=[], years=[]))

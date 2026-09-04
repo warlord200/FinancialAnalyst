@@ -39,13 +39,29 @@ _quota_service: "QuotaService | None" = None
 _steps_service: "StepsService | None" = None
 _embed_model = None
 _llm = None
+_draft_llm = None
 
 NUM_10K = 3
 NUM_10Q = 4
 
 
+def _build_llm(*, thinking: bool = True):
+    kwargs = (
+        {"timeout": 180.0}
+        if thinking
+        else {
+            "additional_kwargs": {"extra_body": {"thinking": {"type": "disabled"}}}
+        }
+    )
+    return DeepSeek(
+        model="deepseek-v4-flash",
+        api_key=config.get_deepseek_api_key(),
+        **kwargs,
+    )
+
+
 def _ensure_models():
-    global _embed_model, _llm
+    global _embed_model, _llm, _draft_llm
     if _embed_model is None:
         account_id, api_token = config.get_cloudflare_credentials()
         if not account_id or not api_token:
@@ -62,8 +78,10 @@ def _ensure_models():
         )
         Settings.embed_model = _embed_model
     if _llm is None:
-        _llm = DeepSeek(model="deepseek-v4-flash", api_key=config.get_deepseek_api_key())
+        _llm = _build_llm()
         Settings.llm = _llm
+    if _draft_llm is None:
+        _draft_llm = _build_llm(thinking=False)
     return _embed_model, _llm
 
 
@@ -248,7 +266,7 @@ def get_steps_service() -> StepsService:
         CompanyIndex(chroma_path="./chroma_db", storage_base="./storage"),
         reranker=reranker_from_env(),
     )
-    generator = ArtifactGenerator(retriever, Settings.llm)
+    generator = ArtifactGenerator(retriever, _draft_llm, repair_llm=_llm)
     chat_service = ChatService(retriever, Settings.llm)
     _steps_service = StepsService(
         numbers_service=get_numbers_service(),
