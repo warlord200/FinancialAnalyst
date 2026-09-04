@@ -1,24 +1,28 @@
 """Retrieval-quality eval comparing vector, hybrid BM25, and reranked retrieval.
 
-Manual eval script — not part of the routine pytest suite. It loads real
-embedding and reranker models, so the heavy work only runs when the module
-is executed directly:
+Manual eval script — not part of the routine pytest suite. It embeds
+corpora and queries through the configured hosted embed model, so the
+heavy work only runs when the module is executed directly:
 
     python tests/test_llamaindex_agent.py --limit 40
 
 It reuses the QA datasets in storage/evals (one per company), re-embeds
-each corpus with the configured embed model (``BAAI/bge-m3`` by default,
-which runs on CPU), and measures three retrieval configs per company:
+each corpus with the configured embed model (``Qwen/Qwen3-Embedding-0.6B``
+by default, served via Cloudflare Workers AI), and measures three
+retrieval configs per company:
 
   - ``vector`` — pure dense retrieval (the baseline)
   - ``hybrid`` — dense + BM25 keyword search fused by reciprocal rank fusion
   - ``rerank``  — hybrid, then a cross-encoder reranker
     (``BAAI/bge-reranker-v2-m3``)
 
-Because the corpus is re-embedded with the configured model, no GPU is
-required and every config is measured in the same harness on the same
-corpus. The numbers (README "METRICS") are the vector/hybrid/rerank
-comparison this ticket reports. The ad-hoc eval harness that replaces this
+Because the corpus is re-embedded with the configured model via the API,
+no local embed model and no GPU are required, and every config is
+measured in the same harness on the same corpus. The numbers (README
+"METRICS") are the vector/hybrid/rerank comparison this ticket reports.
+The query-side instruction is set from ``--query-instruction`` so Qwen's
+documented default and a domain-tuned variant can be measured head-to-head
+on the same cached corpus. The ad-hoc eval harness that replaces this
 script is T13.
 """
 
@@ -92,9 +96,10 @@ def main() -> None:
         RetrieverEvaluator,
     )
     from llama_index.core.schema import NodeWithScore, QueryBundle, TextNode
-    from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+    from llama_index.core.storage.kvstore import SimpleKVStore
     import torch
 
+    from financial_analyst import config
     from financial_analyst.evaluation.eval_utils import (
         EmbeddingQAFinetuneDataset,
         display_results,
@@ -102,7 +107,9 @@ def main() -> None:
     )
     from financial_analyst.indexing.company_index import CompanyIndex
     from financial_analyst.steps.retrieval import (
+        CloudflareEmbedding,
         CrossEncoderReranker,
+        EMBED_MODEL,
         ScopedRetriever,
     )
 
@@ -151,9 +158,28 @@ def main() -> None:
 
     args = _parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device}, embed model: {args.embed_model}")
-    Settings.embed_model = HuggingFaceEmbedding(
-        model_name=args.embed_model, device=device, embed_batch_size=32
+    print(
+        f"Using device: {device}, embed model: {EMBED_MODEL}, "
+        f"query instruction: {args.query_instruction!r}"
+    )
+    account_id, api_token = config.get_cloudflare_credentials()
+    if not account_id or not api_token:
+        raise SystemExit(
+            "Cloudflare Workers AI is not configured: set CLOUDFLARE_ACCOUNT_ID "
+            "and CLOUDFLARE_API_TOKEN in .env to embed corpora"
+        )
+    # A per-run query-embedding cache makes the three configs share one
+    # embed per query instead of one per config. Safe here because each run
+    # uses a single --query-instruction (the prefix is not part of the cache
+    # key, so mixing prefixes in one process must be avoided) and corpus
+    # chunks are long texts no query will equal verbatim.
+    Settings.embed_model = CloudflareEmbedding(
+        account_id=account_id,
+        api_key=api_token,
+        model_name=EMBED_MODEL,
+        query_instruction=args.query_instruction,
+        embed_batch_size=32,
+        embeddings_cache=SimpleKVStore(),
     )
 
     dataset_dirs = sorted(
@@ -174,9 +200,7 @@ def main() -> None:
             str(label_dir / "train_dataset.json")
         )
         corpus_id_by_text = {_norm(text): nid for nid, text in dataset.corpus.items()}
-        if _ensure_collection(
-            index, label, dataset, args.rebuild, args.embed_model
-        ):
+        if _ensure_collection(index, label, dataset, args.rebuild, EMBED_MODEL):
             print(f"Built corpus for {label} ({len(dataset.corpus)} chunks)")
         sub = _limited(dataset, args.limit, args.seed)
 
@@ -247,7 +271,11 @@ def _parse_args():
         default="storage/evals/chroma_hybrid",
         help="dir for the re-embedded Chroma collections",
     )
-    parser.add_argument("--embed-model", default="BAAI/bge-m3")
+    parser.add_argument(
+        "--query-instruction",
+        default="Instruct: Given a web search query, retrieve relevant passages that answer the query\nQuery: ",
+        help="prefix prepended to each query (Qwen3 query prompt)",
+    )
     parser.add_argument(
         "--reranker-model", default="BAAI/bge-reranker-v2-m3"
     )

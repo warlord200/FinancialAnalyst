@@ -5,11 +5,15 @@ Item 1 / Item 1A, step 3 uses Items 7/8 and the numbers layer). This
 module returns ``SourceChunk`` objects that carry the metadata needed to
 source-tag an artifact section (Item, fiscal year, filing type).
 
-Each company's vectors were embedded with whatever model was configured
-when it was ingested, so queries are embedded with a model whose output
-dimension matches the collection's stored vectors (recorded at build
-time, or inferred from the stored vectors for legacy collections)
-instead of assuming the process-global embed model matches.
+There is exactly one embed model (``EMBED_MODEL``), used for both ingest
+and query. It runs hosted on Cloudflare Workers AI (``CloudflareEmbedding``
+in this module) rather than on the server, so no local model is loaded for
+embedding. A collection is servable when the ``embed_model`` name recorded
+on it at build time matches the server's current embed model; queries are
+embedded with the query-side instruction (Qwen3 wants an ``Instruct:...``
+prefix on queries, none on passages). A mismatched collection raises
+``EmbedModelMismatchError`` telling the operator to re-ingest, so two
+same-dimension models can never silently share a vector space.
 
 Retrieval is hybrid by default: a dense (embedding) leg and a sparse
 (BM25) leg over the same scoped corpus are fused with reciprocal rank
@@ -20,6 +24,7 @@ candidates; whether it helps on this corpus is measured by the eval
 harness (``tests/test_llamaindex_agent.py``) and documented in README.
 """
 
+import asyncio
 import os
 import re
 import torch
@@ -27,28 +32,131 @@ from dataclasses import dataclass
 
 import chromadb
 from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core.embeddings import BaseEmbedding
+from openai import OpenAI
 from rank_bm25 import BM25Okapi
 
 from financial_analyst.indexing.company_index import CompanyIndex
 
-DEFAULT_EMBED_MODEL = "BAAI/bge-m3"
-HIGH_QUALITY_EMBED_MODEL = "Octen/Octen-Embedding-4B-INT8"
+# Canonical model identity. The corpus records this name at build time and
+# a collection is only servable by a model of the same name; it is the
+# human-facing model, not the wire id used to call the hosting API.
+EMBED_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+# Cloudflare Workers AI model id for the same model (Cloudflare hosts it
+# under its own ``@cf/...`` slug). Vectors are interchangeable with the
+# local model — see ADR-0001.
+CLOUDFLARE_EMBED_MODEL = "@cf/qwen/qwen3-embedding-0.6b"
+CLOUDFLARE_EMBEDDINGS_BASE_URL = (
+    "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+)
 DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
-EMBED_MODEL_DIMS = {
-    DEFAULT_EMBED_MODEL: 1024,
-    HIGH_QUALITY_EMBED_MODEL: 2560,
-}
+
+# Qwen3 wants an ``Instruct: ...\nQuery: `` prefix on queries; passages
+# are embedded with no instruction. The domain-tuned variant is measured
+# head-to-head against Qwen's documented default in the eval harness
+# (README "METRICS") before one is locked in.
+EMBED_QUERY_INSTRUCTION = os.getenv(
+    "EMBED_QUERY_INSTRUCTION",
+    "Instruct: Given a web search query, retrieve relevant passages that "
+    "answer the query\nQuery: ",
+)
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
-class EmbedModelMismatchError(Exception):
-    def __init__(self, dim: int) -> None:
+class CloudflareEmbedding(BaseEmbedding):
+    """Hosted Qwen3 embedder backed by Cloudflare Workers AI.
+
+    The same model the corpus is keyed on (``EMBED_MODEL``) runs on
+    Cloudflare's side, so vectors are interchangeable with a locally
+    embedded corpus and ``model_name`` keeps the canonical identity that
+    ``CompanyIndex`` records at build time. Credentials are read from the
+    environment (``CLOUDFLARE_ACCOUNT_ID`` / ``CLOUDFLARE_API_TOKEN``) and
+    kept out of the model's serialized form.
+
+    Cloudflare does not add Qwen3's query prompt, so ``query_instruction``
+    is prepended to every query embedding and left off passages, matching
+    the local embedder's behaviour.
+    """
+
+    def __init__(
+        self,
+        *,
+        account_id: str,
+        api_key: str,
+        query_instruction: str = EMBED_QUERY_INSTRUCTION,
+        model_name: str = EMBED_MODEL,
+        embed_batch_size: int = 32,
+        embeddings_cache=None,
+    ) -> None:
         super().__init__(
-            f"The corpus was indexed with a {dim}-dimensional embedding model that this "
-            "server cannot load. Re-ingest the ticker with the current EMBED_MODEL setting "
-            "to regenerate its vectors."
+            model_name=model_name,
+            embed_batch_size=embed_batch_size,
+            embeddings_cache=embeddings_cache,
+        )
+        object.__setattr__(self, "_account_id", account_id)
+        object.__setattr__(self, "_api_key", api_key)
+        object.__setattr__(self, "_query_instruction", query_instruction)
+        object.__setattr__(self, "_client", None)
+
+    def _ensure_client(self) -> OpenAI:
+        if self._client is None:
+            object.__setattr__(
+                self,
+                "_client",
+                OpenAI(
+                    api_key=self._api_key,
+                    base_url=CLOUDFLARE_EMBEDDINGS_BASE_URL.format(
+                        account_id=self._account_id
+                    ),
+                ),
+            )
+        return self._client
+
+    def _embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        response = self._ensure_client().embeddings.create(
+            model=CLOUDFLARE_EMBED_MODEL, input=texts
+        )
+        return [item.embedding for item in response.data]
+
+    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:
+        return self._embed(texts)
+
+    def _get_text_embedding(self, text: str) -> list[float]:
+        return self._embed([text])[0]
+
+    def _get_query_embedding(self, query: str) -> list[float]:
+        return self._embed([self._query_instruction + query])[0]
+
+    async def _aget_query_embedding(self, query: str) -> list[float]:
+        return await asyncio.to_thread(self._get_query_embedding, query)
+
+    async def _aget_text_embedding(self, text: str) -> list[float]:
+        return await asyncio.to_thread(self._get_text_embedding, text)
+
+    async def _aget_text_embeddings(self, texts: list[str]) -> list[list[float]]:
+        return await asyncio.to_thread(self._get_text_embeddings, texts)
+
+
+class EmbedModelMismatchError(Exception):
+    """The collection's recorded embed model does not match the server's.
+
+    Raised by name (a collection records the ``embed_model`` name it was
+    built with; the server serves queries with its current model) or, for
+    legacy corpora with no recorded name, by dimension.
+    """
+
+    def __init__(self, dim: int) -> None:
+        if dim:
+            head = f"The corpus was indexed with a {dim}-dimensional embedding model"
+        else:
+            head = "The corpus was indexed with an embedding model name"
+        super().__init__(
+            f"{head} that does not match the server's current embed model "
+            "(EMBED_MODEL). Re-ingest the ticker with the current EMBED_MODEL "
+            "setting to regenerate its vectors."
         )
         self.dim = dim
 
@@ -189,7 +297,6 @@ class ScopedRetriever:
         self.reranker = reranker
         self.candidate_k = candidate_k
         self.rrf_k = rrf_k
-        self._models: dict[str, HuggingFaceEmbedding] = {}
         self._settings_dim: int | None = None
         self._settings_probed = False
         self._sparse_cache: dict[tuple, _SparseIndex | None] = {}
@@ -209,7 +316,7 @@ class ScopedRetriever:
 
     def _probe_dim(self, model) -> int | None:
         try:
-            return len(model.get_text_embedding("probe"))
+            return len(model.get_query_embedding("probe"))
         except Exception:
             return None
 
@@ -219,21 +326,28 @@ class ScopedRetriever:
             self._settings_probed = True
         return self._settings_dim
 
-    def _model_for_dim(self, dim: int):
-        if self._current_dim() == dim and Settings.embed_model is not None:
-            return Settings.embed_model
-        name = next((n for n, d in EMBED_MODEL_DIMS.items() if d == dim), None)
-        if name is None:
-            raise EmbedModelMismatchError(dim)
-        if name not in self._models:
-            device = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-            model = HuggingFaceEmbedding(
-                model_name=name, device=device, embed_batch_size=32
-            )
-            if self._probe_dim(model) != dim:
-                raise EmbedModelMismatchError(dim)
-            self._models[name] = model
-        return self._models[name]
+    def _resolve_query_model(self, collection):
+        """Return the embed model that may query ``collection``.
+
+        The server serves every query with the current embed model
+        (``Settings.embed_model``). A collection is compatible when the
+        ``embed_model`` name recorded on it at build time matches the
+        current model — name, not dimension, is the identity signal, so
+        two same-dimension models can never silently share a vector space.
+        Legacy collections with no recorded name fall back to a dimension
+        check, and any mismatch raises ``EmbedModelMismatchError`` telling
+        the operator to re-ingest.
+        """
+        model = Settings.embed_model
+        stored_dim = self._stored_dim(collection)
+        recorded_name = (collection.metadata or {}).get("embed_model") or ""
+        current_name = getattr(model, "model_name", "") or ""
+        current_dim = self._current_dim()
+        if recorded_name and current_name and recorded_name != current_name:
+            raise EmbedModelMismatchError(stored_dim or 0)
+        if current_dim is not None and stored_dim is not None and current_dim != stored_dim:
+            raise EmbedModelMismatchError(stored_dim)
+        return model
 
     @staticmethod
     def _where(items: list[str] | None, fiscal_year: int | None) -> dict | None:
@@ -336,11 +450,10 @@ class ScopedRetriever:
             return []
         if collection.count() == 0:
             return []
-        dim = self._stored_dim(collection)
-        if dim is None:
+        if self._stored_dim(collection) is None:
             return []
-        model = self._model_for_dim(dim)
-        query_embedding = model.get_text_embedding(query)
+        model = self._resolve_query_model(collection)
+        query_embedding = model.get_query_embedding(query)
         k = top_k or self.default_top_k
         n = self._candidate_pool(k)
         where = self._where(items, fiscal_year)

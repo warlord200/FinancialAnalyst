@@ -2,6 +2,16 @@
 
 Researched 2026-08-29 against primary sources (official pricing/docs pages). App needs: FastAPI + static React frontend, ChromaDB (persistent on-disk vector store) + SQLite, sentence-transformers bge-m3 (~570M params) on CPU, always-on background worker (SEC filings → embeddings), outbound calls to SEC EDGAR / yfinance / DeepSeek. Realistic budget: 2–4 GB RAM, a few vCPUs, a few GB disk, ALWAYS-ON (no sleep-after-idle).
 
+## Update (4 Sep 2026): embedding moved off-box to Cloudflare Workers AI
+
+The embed model (now **Qwen/Qwen3-Embedding-0.6B**, see `docs/adr/0001-single-embed-model-qwen3.md`) no longer runs on the host. It is served by **Cloudflare Workers AI** (free tier, 10,000 neurons/day; the model costs 1075 neurons/M tokens). AAPL's 403-chunk corpus is ~190 neurons per re-ingest — roughly 50 full re-ingests/day fit in the free tier. Consequences for this research:
+
+- **The ~1.2 GB Qwen3 model no longer needs RAM or disk on the box**, and CPU embedding time (~19–20 min per AAPL re-ingest locally) is gone; a re-ingest is one batched API call (~1 min).
+- The always-on worker now does SEC download + parsing + Chroma writes only; its main outbound cost is SEC EDGAR requests.
+- Memory pressure drops to ChromaDB + SQLite + (optionally, behind `RERANKER_MODEL`) a ~2.3 GB cross-encoder loaded only when enabled.
+- The ARM/no-ARM and swap decisions in the sections below were driven largely by the local embed model; with embedding hosted, a smaller VM (e.g. the 1 GB B1s or a 1 GB micro) becomes viable for the core app. The free-tier options that previously failed on RAM (Render free's 512 MB, Railway Free, Heroku Eco) are no longer ruled out purely by embedding RAM, but keep the other disqualifiers (ephemeral disk, sleep-after-idle, whitelisted egress) from the analysis below.
+- Network-only budget: embeddings are free at this volume; the remaining always-on cost is the VM/disk itself.
+
 ## Stack feasibility notes (verified against primary sources)
 
 - **ARM/aarch64 wheels — LOW risk, verified.** `torch 2.13.0` ships `manylinux_2_28_aarch64` wheels for cp310–cp314 (pypi.org/project/torch/#files). `onnxruntime 1.29.0` ships `manylinux_2_28_aarch64` wheels for cp311–cp314, including cp313 (pypi.org/project/onnxruntime/#files). `sentence-transformers` is pure Python on top of torch/transformers (no native code). So Ampere A1 (ARM) is workable. Caveat: pin recent versions and check transitive native deps (duckdb, tokenizers) against your exact lock file before committing to ARM.

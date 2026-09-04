@@ -1,9 +1,7 @@
 from datetime import datetime, timezone
 import os
 
-import torch
 from llama_index.core import Settings
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.deepseek import DeepSeek
 
 from financial_analyst import config
@@ -23,7 +21,12 @@ from financial_analyst.reader.sec_html_reader import SECHtmlReader
 from financial_analyst.steps.chat import ChatService
 from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
-from financial_analyst.steps.retrieval import ScopedRetriever, reranker_from_env
+from financial_analyst.steps.retrieval import (
+    CloudflareEmbedding,
+    EMBED_QUERY_INSTRUCTION,
+    ScopedRetriever,
+    reranker_from_env,
+)
 from financial_analyst.steps.service import StepsService
 from financial_analyst.steps.state import PeerStateStore, StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
@@ -40,19 +43,21 @@ _llm = None
 NUM_10K = 3
 NUM_10Q = 4
 
-DEFAULT_EMBED_MODEL = "BAAI/bge-m3"
-HIGH_QUALITY_EMBED_MODEL = "Octen/Octen-Embedding-4B-INT8"
-
 
 def _ensure_models():
     global _embed_model, _llm
     if _embed_model is None:
-        device = str(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        model_name = os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
+        account_id, api_token = config.get_cloudflare_credentials()
+        if not account_id or not api_token:
+            raise RuntimeError(
+                "Cloudflare Workers AI is not configured: set CLOUDFLARE_ACCOUNT_ID "
+                "and CLOUDFLARE_API_TOKEN in .env to embed corpora"
+            )
         batch_size = int(os.getenv("EMBED_BATCH_SIZE", "32"))
-        _embed_model = HuggingFaceEmbedding(
-            model_name=model_name,
-            device=device,
+        _embed_model = CloudflareEmbedding(
+            account_id=account_id,
+            api_key=api_token,
+            query_instruction=EMBED_QUERY_INSTRUCTION,
             embed_batch_size=batch_size,
         )
         Settings.embed_model = _embed_model

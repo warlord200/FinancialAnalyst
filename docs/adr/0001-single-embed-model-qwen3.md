@@ -1,0 +1,17 @@
+# Single embed model: Qwen/Qwen3-Embedding-0.6B (Octen removed, bge-m3 dropped), hosted on Cloudflare Workers AI
+
+The app ran on a CPU-only box but configured `Octen/Octen-Embedding-4B-INT8` as its high-quality embed model — a 4B, 2560-dimension, GPU-oriented model that cannot run here, leaving every Octen-indexed corpus unservable. We decided to replace Octen with **`Qwen/Qwen3-Embedding-0.6B`** as the *single* embed model — 0.6B params, 1024-dimension, multilingual, Apache-2.0 — and to remove `BAAI/bge-m3` from the code entirely rather than keep it as a fallback.
+
+A later measurement settled where the model runs. Local CPU embedding of the 403-chunk AAPL corpus measures ~0.38 chunks/s (~19–20 min per full re-ingest), and quantization does not rescue it: `torch` int8 destroys quality and weight-only `torchao` int8 gives no CPU speedup. The same model is served by **Cloudflare Workers AI** (free tier, model id `@cf/qwen/qwen3-embedding-0.6b`), which embedded the same corpus in ~1 min and returns numerically identical vectors (cosine 1.0000 against local CPU output on the real AAPL chunks). **Embedding therefore runs on Cloudflare; no local embed model is loaded.**
+
+Key trade-offs, recorded:
+
+- **2560-dim Octen corpora are deleted and AAPL is re-ingested** under Qwen3, so every stored corpus matches the model that serves it. This is the standing rule going forward: a model change means a re-ingest, because Chroma vectors carry no cross-model meaning.
+- **Corpus identity is keyed by the recorded `embed_model` name** (`company_index.py` already writes it at build), with dimension kept only as a last-resort check for legacy corpora — so two same-dimension models can never silently share a vector space. Dimension is no longer trusted to identify a model.
+- **The recorded name stays `Qwen/Qwen3-Embedding-0.6B` even though calls go to Cloudflare.** `EMBED_MODEL` is the canonical model identity; `CLOUDFLARE_EMBED_MODEL` (`@cf/qwen/qwen3-embedding-0.6b`) is the wire id of the same model on Cloudflare's side. Keeping the name keyed to the model (not the hosting API) means locally-embedded and Cloudflare-embedded vectors remain interchangeable and the name survives a hosting change.
+- **`EMBED_MODEL_DIMS` and the dual-constant scaffolding (`DEFAULT_EMBED_MODEL` / `HIGH_QUALITY_EMBED_MODEL`) collapse** to one model constant.
+- **The legacy Gradio demo `financial_analyst/app.py` is deleted**; `api/main.py` is the live entrypoint.
+- **bge-reranker-v2-m3 stays** as an optional cross-encoder behind `RERANKER_MODEL` (off by default) — it is a reranker, not an embed model, and it was a measured win.
+- **Qwen3 queries get an `Instruct:...\nQuery:` prefix** (Cloudflare embeds whatever text it is sent, so the embedder prepends it). Qwen's documented default was measured head-to-head against a domain-tuned SEC-filing variant on the eval corpora; the documented default matched or beat the variant on MRR/NDCG, so it stays as `EMBED_QUERY_INSTRUCTION`.
+- **Hosting cost of the model drops to network-only.** The ~1.2 GB local model and its CPU time are gone; the free tier's 10,000 neurons/day covers roughly 50 full AAPL re-ingests/day (~190 neurons per ingest). See `docs/research/student-hosting-options-2026.md`.
+- Eval numbers in `README.md` and the model-memory estimates in `docs/research/student-hosting-options-2026.md` are re-measured/re-written to the hosted-Qwen3 reality.
