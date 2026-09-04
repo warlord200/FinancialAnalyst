@@ -731,6 +731,12 @@ function ValuationPanel({
                   </tr>
                 </tbody>
               </table>
+              {dcf.diverges && (
+                <p className="meta-text">
+                  The perpetuity diverges: growth must stay below the discount rate. Raise the
+                  discount rate or lower the growth assumption to get a finite value.
+                </p>
+              )}
               <h3>Sensitivity · equity value per share (discount rate × growth)</h3>
               <table className="matrix">
                 <thead>

@@ -98,6 +98,28 @@ class TestDcf:
         }
         assert dcf(compute(make_facts(no_cash_flow))) is None
 
+    def test_dcf_growth_equal_to_discount_still_returns_payload(self):
+        """Growth matching the discount rate diverges the perpetuity but the
+        company is otherwise valuble: the payload survives so the UI keeps the
+        intrinsic-value section and its assumption inputs visible, with the
+        per-share value nulled out (regression: the whole section vanished).
+        """
+        d = dcf(full_financials(), discount_rate=0.10, growth=0.10)
+        assert d is not None
+        assert d["discount_rate"] == pytest.approx(0.10)
+        assert d["growth"] == pytest.approx(0.10)
+        assert d["fcf"] == pytest.approx(28.0)
+        assert d["net_debt"] == pytest.approx(40.0)
+        assert d["enterprise_value"] is None
+        assert d["equity_value"] is None
+        assert d["equity_value_per_share"] is None
+        assert d["sensitivity"]["rows"]
+
+    def test_dcf_growth_above_discount_still_returns_payload(self):
+        d = dcf(full_financials(), discount_rate=0.10, growth=0.12)
+        assert d is not None
+        assert d["equity_value_per_share"] is None
+
 
 class TestHistorical:
     def test_history_aligns_prices_to_fiscal_year_ends(self):

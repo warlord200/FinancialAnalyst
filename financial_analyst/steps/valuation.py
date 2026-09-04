@@ -139,18 +139,32 @@ def market_multiples(financials: dict, price: float | None) -> dict:
 def _dcf_components(
     financials: dict, year: int, discount_rate: float, growth: float
 ) -> dict | None:
-    """The DCF breakdown for a fiscal year, or None when it cannot be valued.
+    """The DCF breakdown for a fiscal year, or None when the company cannot
+    be valued.
 
     A single-stage growing perpetuity on the year's free cash flow. Returns
-    None when the free cash flow is missing or not positive, when there are
-    no shares to divide by, or when the discount rate does not exceed the
-    growth rate (the perpetuity diverges).
+    None only when the company itself cannot be valued — the free cash flow
+    is missing or not positive, or there are no shares to divide by. A
+    discount rate that does not exceed the growth rate (the perpetuity
+    diverges) is an assumption problem, not a company-data problem: the
+    payload is returned with ``enterprise_value``, ``equity_value`` and
+    ``equity_value_per_share`` nulled and ``diverges`` set, so the caller can
+    keep the model visible and let the user correct the assumptions.
     """
     fcf = _free_cash_flow(financials, year)
     cap_shares = _shares_for_cap(financials.get("shares", {}), year)
-    if fcf is None or fcf <= 0 or discount_rate <= growth or not cap_shares:
+    if fcf is None or fcf <= 0 or not cap_shares:
         return None
     net_debt = _net_debt(financials, year)
+    if discount_rate <= growth:
+        return {
+            "fcf": fcf,
+            "net_debt": net_debt,
+            "enterprise_value": None,
+            "equity_value": None,
+            "equity_value_per_share": None,
+            "diverges": True,
+        }
     enterprise_value = fcf * (1 + growth) / (discount_rate - growth)
     equity_value = enterprise_value - net_debt
     return {
@@ -159,6 +173,7 @@ def _dcf_components(
         "enterprise_value": enterprise_value,
         "equity_value": equity_value,
         "equity_value_per_share": equity_value / cap_shares,
+        "diverges": False,
     }
 
 
@@ -188,9 +203,11 @@ def dcf(
 ) -> dict | None:
     """DCF equity value per share under single-stage growing perpetuity.
 
-    Returns None when the base-year free cash flow is missing or not
-    positive, when there are no shares to divide by, or when the discount
-    rate does not exceed the growth rate (the perpetuity diverges).
+    Returns None when the company cannot be valued: the base-year free cash
+    flow is missing or not positive, or there are no shares to divide by.
+    When only the assumptions diverge (growth at or above the discount rate)
+    the payload is still returned with the per-share value nulled, so the
+    caller can keep the model on screen.
     """
     year = _latest_fiscal_year(financials)
     if year is None:

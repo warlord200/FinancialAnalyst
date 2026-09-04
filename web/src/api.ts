@@ -214,9 +214,10 @@ export interface DcfOutput {
   discount_rate: number;
   growth: number;
   net_debt: number;
-  enterprise_value: number;
-  equity_value: number;
+  enterprise_value: number | null;
+  equity_value: number | null;
   equity_value_per_share: number | null;
+  diverges: boolean;
   sensitivity: {
     discount_rates: number[];
     growth_rates: number[];
