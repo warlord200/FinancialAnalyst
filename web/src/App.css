@@ -63,6 +63,13 @@ button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; colo
 .source-tag.source-xbrl_fact { background: #fce8e6; color: #c5221f; }
 .evidence-block { margin-top: 8px; color: #5f6368; font-size: 0.9rem; }
 .evidence-block ul { padding-left: 18px; }
+.thesis-textarea {
+  width: 100%; padding: 10px 12px; font-size: 0.98rem; line-height: 1.5;
+  border: 1px solid #d1d1d6; border-radius: 8px; font-family: inherit;
+  resize: vertical; box-sizing: border-box;
+}
+.thesis-textarea:focus { outline: none; border-color: #0a66c2; }
+.thesis-editor .matrix-block h2 { margin-top: 0; }
 .swot-heading { margin: 28px 0 4px; }
 .swot-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;

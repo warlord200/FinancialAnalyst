@@ -28,7 +28,7 @@ from financial_analyst.steps.retrieval import (
     reranker_from_env,
 )
 from financial_analyst.steps.service import StepsService
-from financial_analyst.steps.state import PeerStateStore, StepStateStore
+from financial_analyst.steps.state import PeerStateStore, StepStateStore, ThesisStore
 from financial_analyst.storage.registry import CacheRegistry
 
 _analyzer: Analyzer | None = None
@@ -275,5 +275,6 @@ def get_steps_service() -> StepsService:
         draft_store=DraftStore("./storage/drafts.json"),
         chat_service=chat_service,
         peers_store=PeerStateStore("./storage/steps.db"),
+        thesis_store=ThesisStore("./storage/steps.db"),
     )
     return _steps_service

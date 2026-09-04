@@ -1,13 +1,14 @@
 """The dossier step service: reads the shared numbers layer, the shared
 content corpus, and the per-user step state, and composes step responses.
 
-Step 1 (the one-pager) and step 5 (valuation) are pure derivations from
-the numbers layer — no generation, no corpus. Step 5 is hard-gated: it is
-not computed until the user marks steps 1-4 done in the per-user step
-state, so the price cannot bias the earlier analysis. Steps 2-4 are
-source-tagged artifacts produced by the generation framework over the
-shared corpus; they are cached per ticker so a repeat view is instant and
-stable.
+Step 1 (the one-pager), step 3 tables, and step 5 (valuation) are pure
+derivations from the numbers layer. Step 5 is hard-gated: it is not
+computed until the user marks steps 1-4 done in the per-user step state,
+so the price cannot bias the earlier analysis. Steps 2-4 are source-tagged
+artifacts produced by the generation framework over the shared corpus;
+they are cached per ticker so a repeat view is instant and stable. Step 6
+(the thesis) is gated like valuation, drafts the same way as steps 2-4,
+and then layers the user's own saved edits on top per (email, ticker).
 """
 
 from financial_analyst.steps import STEP_ONE, VALUATION_GATE_STEPS
@@ -19,6 +20,10 @@ from financial_analyst.steps.one_pager import build_one_pager
 from financial_analyst.steps.peers import build_scorecard
 from financial_analyst.steps.strategy import ARTIFACT_TYPE as STRATEGY_TYPE
 from financial_analyst.steps.strategy import build_strategy
+from financial_analyst.steps.thesis import THESIS_SECTIONS
+from financial_analyst.steps.thesis import THESIS_TYPE
+from financial_analyst.steps.thesis import build_thesis
+from financial_analyst.steps.thesis import thesis_section_keys
 from financial_analyst.steps.valuation import market_multiples
 from financial_analyst.steps.valuation import valuation as compute_valuation
 
@@ -32,6 +37,7 @@ class StepsService:
         draft_store=None,
         chat_service=None,
         peers_store=None,
+        thesis_store=None,
     ) -> None:
         self.numbers = numbers_service
         self.state = state_store
@@ -39,6 +45,7 @@ class StepsService:
         self.drafts = draft_store
         self.chat_service = chat_service
         self.peers_store = peers_store
+        self.thesis_store = thesis_store
 
     def one_pager(self, email: str, ticker: str) -> dict | None:
         ticker = ticker.upper()
@@ -311,3 +318,127 @@ class StepsService:
             "peers": list(peers),
             "scorecard": [table.model_dump() for table in scorecard],
         }
+
+    def _thesis_draft(self, ticker: str) -> dict | None:
+        """The shared, source-tagged thesis draft for a ticker.
+
+        Generated once through the generation framework over the dossier
+        corpus and cached per ticker, so a repeat view is instant and every
+        user seeds their editable thesis from the same grounded draft.
+        Returns None when there is no generator or no corpus to draft over.
+        """
+        cached = self.drafts.get_draft(ticker, THESIS_TYPE) if self.drafts else None
+        if cached is not None:
+            return cached
+        if self.generator is None:
+            return None
+        try:
+            artifact = build_thesis(self.generator, ticker)
+        except NoSourceError:
+            return None
+        draft = artifact.model_dump()
+        if self.drafts is not None:
+            self.drafts.set_draft(ticker, THESIS_TYPE, draft)
+        return draft
+
+    def _thesis_doc(
+        self, ticker: str, saved: dict | None, draft: dict | None
+    ) -> dict:
+        """Merge the user's saved edits over the grounded draft.
+
+        Every canonical section carries the user's saved text when they have
+        saved it, else the draft's seeded content. The section list keeps the
+        canonical order and headings; the grounded source tags stay on the
+        draft, so the thesis is editable without claiming the user's own
+        words are sourced.
+        """
+        saved_content = (saved or {}).get("content", {})
+        sections = []
+        for spec in THESIS_SECTIONS:
+            content = saved_content.get(spec.key)
+            if content is None and draft is not None:
+                for section in draft.get("sections", []):
+                    if section["key"] == spec.key:
+                        content = section["content"]
+                        break
+            sections.append(
+                {
+                    "key": spec.key,
+                    "heading": spec.heading,
+                    "content": content or "",
+                }
+            )
+        return {
+            "saved": saved is not None,
+            "saved_at": (saved or {}).get("saved_at"),
+            "sections": sections,
+        }
+
+    def thesis(self, email: str, ticker: str) -> dict | None:
+        """The Step 6 thesis, locked until the user marks steps 1-4 done.
+
+        Returns a locked payload with ``missing_steps`` until every gating
+        step is marked done, mirroring valuation: the thesis is the final
+        synthesis, so it is only composed after the user has reviewed the
+        dossier. A thesis the user has already saved stays visible even if a
+        step is later unmarked — it is their durable record — but the shared
+        draft is not (re)generated while locked. When unlocked the response
+        carries the grounded draft (for the devil's-advocate and open-gaps
+        grounding) plus the user's editable thesis document, seeded from the
+        draft until the user saves their own edits. Returns None when the
+        ticker has no numbers, or when it is unlocked but there is no corpus
+        to draft over and the user has not saved a thesis yet.
+        """
+        ticker = ticker.upper()
+        if self.numbers.get(ticker) is None:
+            return None
+        done_map = self._done_map(email, ticker)
+        missing = [step for step in VALUATION_GATE_STEPS if not done_map[str(step)]]
+        payload = {
+            "ticker": ticker,
+            "locked": bool(missing),
+            "done": done_map,
+            "missing_steps": missing,
+        }
+        saved = self.thesis_store.get(email, ticker) if self.thesis_store else None
+        if missing:
+            if saved is None:
+                return payload
+            return {
+                **payload,
+                "draft": None,
+                "thesis": self._thesis_doc(ticker, saved, None),
+            }
+
+        draft = self._thesis_draft(ticker)
+        if draft is None and saved is None:
+            return None
+        return {
+            **payload,
+            "draft": draft,
+            "thesis": self._thesis_doc(ticker, saved, draft),
+        }
+
+    def save_thesis(
+        self, email: str, ticker: str, sections: list[dict]
+    ) -> dict | None:
+        """Persist the user's edited thesis sections for (email, ticker).
+
+        Only the canonical section keys are stored; anything else is
+        dropped, and the API layer rejects them up front with a 422. Saved
+        edits merge over any earlier saved document, so a partial save (one
+        section at a time) never blanks the rest. Returns None when the
+        ticker has no numbers, so the caller can 404; the returned dict is
+        the same unlocked view as ``thesis`` so the UI can refresh in place.
+        """
+        ticker = ticker.upper()
+        if self.numbers.get(ticker) is None or self.thesis_store is None:
+            return None
+        existing = self.thesis_store.get(email, ticker) or {}
+        content = dict(existing.get("content", {}))
+        allowed = set(thesis_section_keys())
+        for section in sections:
+            if section["key"] in allowed:
+                content[section["key"]] = str(section["content"])
+        self.thesis_store.save(email, ticker, content)
+        return self.thesis(email, ticker)

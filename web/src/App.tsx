@@ -14,6 +14,7 @@ import {
   getPeers,
   getQuota,
   getStrategy,
+  getThesis,
   getToken,
   getValuation,
   ingestTicker,
@@ -22,6 +23,7 @@ import {
   logout,
   markStepDone,
   refreshNumbers,
+  saveThesis,
   setPeers,
   setPriceOverride,
   setStepGate,
@@ -42,6 +44,7 @@ import {
   SourceTag,
   StrategyResponse,
   TableUnit,
+  ThesisResponse,
   ValuationResponse,
 } from "./api";
 
@@ -858,6 +861,135 @@ function ValuationPanel({
   );
 }
 
+function ThesisPanel({
+  response,
+  onToggleDone,
+  onSave,
+  saving,
+}: {
+  response: ThesisResponse;
+  onToggleDone: (step: number, done: boolean) => void;
+  onSave: (sections: { key: string; content: string }[]) => Promise<void>;
+  saving: boolean;
+}) {
+  const thesis = response.thesis ?? null;
+  const [edits, setEdits] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!thesis) return;
+    setEdits(
+      Object.fromEntries(thesis.sections.map((s) => [s.key, s.content]))
+    );
+  }, [thesis, response.ticker]);
+
+  const draftByKey = new Map(
+    (response.draft?.sections ?? []).map((s) => [s.key, s])
+  );
+
+  function save() {
+    const sections = thesis?.sections.map((s) => ({
+      key: s.key,
+      content: edits[s.key] ?? s.content,
+    }));
+    if (!sections) return;
+    onSave(sections);
+  }
+
+  return (
+    <section>
+      <div className="report-meta">
+        <span className="meta-text">
+          Step 6 · Thesis · {response.ticker} · locked until you mark steps
+          1-4 done, so the thesis follows the whole dossier.
+        </span>
+        {thesis?.saved && thesis.saved_at && (
+          <span className="meta-text">saved {thesis.saved_at.slice(0, 10)}</span>
+        )}
+      </div>
+
+      <div className="peer-list">
+        {Object.entries(VALUATION_STEP_LABELS).map(([step, label]) => {
+          const done = response.done[step] ?? false;
+          return (
+            <span key={step} className="peer-chip">
+              {label}
+              <button
+                onClick={() => onToggleDone(Number(step), done)}
+                className="link-button"
+                aria-label={`${done ? "Unmark" : "Mark"} ${label} done`}
+              >
+                {done ? "Done — undo" : "mark done"}
+              </button>
+            </span>
+          );
+        })}
+      </div>
+
+      {!thesis ? (
+        <div className="status">
+          Thesis locked. Finish reviewing the steps above to draft and save
+          your thesis.
+        </div>
+      ) : (
+        <div className="thesis-editor">
+          {thesis.sections.map((section) => {
+            const draft = draftByKey.get(section.key);
+            return (
+              <section key={section.key} className="matrix-block">
+                <h2>{section.heading}</h2>
+                <textarea
+                  value={edits[section.key] ?? section.content}
+                  onChange={(e) =>
+                    setEdits((prev) => ({
+                      ...prev,
+                      [section.key]: e.target.value,
+                    }))
+                  }
+                  rows={5}
+                  className="thesis-textarea"
+                />
+                {draft && draft.sources.length > 0 && (
+                  <>
+                    <div className="source-tags">
+                      <span className="meta-text">Draft grounding · </span>
+                      {draft.sources.map((tag, i) => (
+                        <span
+                          key={i}
+                          className={`source-tag source-${tag.type}`}
+                        >
+                          {sourceTagLabel(tag)}
+                        </span>
+                      ))}
+                    </div>
+                    {draft.evidence.length > 0 && (
+                      <details className="evidence-block">
+                        <summary>Draft source quotes</summary>
+                        <ul>
+                          {draft.evidence.map((quote, i) => (
+                            <li key={i}>"{quote}"</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </>
+                )}
+              </section>
+            );
+          })}
+          <button
+            onClick={save}
+            disabled={saving}
+            className="primary"
+            style={{ marginTop: 12 }}
+          >
+            {saving ? "Saving…" : "Save thesis"}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
@@ -1092,6 +1224,12 @@ export default function App() {
   const [valuationLoading, setValuationLoading] = useState(false);
   const [valDiscountPct, setValDiscountPct] = useState("10");
   const [valGrowthPct, setValGrowthPct] = useState("3");
+
+  const [thesis, setThesis] = useState<ThesisResponse | null>(null);
+  const [thesisTicker, setThesisTicker] = useState("");
+  const [thesisError, setThesisError] = useState("");
+  const [thesisLoading, setThesisLoading] = useState(false);
+  const [thesisSaving, setThesisSaving] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -1339,6 +1477,52 @@ export default function App() {
 
   function applyValuationAssumptions() {
     loadValuation(valuationTicker);
+  }
+
+  async function loadThesis(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setThesisTicker(s);
+    setThesisLoading(true);
+    setThesisError("");
+    try {
+      await ensureNumbers(s);
+      setThesis(await getThesis(s));
+    } catch (e) {
+      setThesisError(e instanceof Error ? e.message : "Failed to load thesis");
+    } finally {
+      setThesisLoading(false);
+    }
+  }
+
+  async function toggleThesisDone(step: number, done: boolean) {
+    if (!thesisTicker || !thesis) return;
+    setThesisError("");
+    try {
+      if (done) {
+        await clearStepDone(thesisTicker, step);
+      } else {
+        await markStepDone(thesisTicker, step);
+      }
+      setThesis(await getThesis(thesisTicker));
+    } catch (e) {
+      setThesisError(e instanceof Error ? e.message : "Failed to save done mark");
+    }
+  }
+
+  async function saveThesisDoc(
+    sections: { key: string; content: string }[]
+  ) {
+    if (!thesisTicker) return;
+    setThesisSaving(true);
+    setThesisError("");
+    try {
+      setThesis(await saveThesis(thesisTicker, sections));
+    } catch (e) {
+      setThesisError(e instanceof Error ? e.message : "Failed to save thesis");
+    } finally {
+      setThesisSaving(false);
+    }
   }
 
   return (
@@ -1659,15 +1843,32 @@ export default function App() {
       ) : (
         <div className="layout">
           <main className="content">
-            <div className="report-meta">
-              <span className="meta-text">
-                {(() => {
-                  const step = DOSSIER_STEPS.find((s) => s.view === view);
-                  return `Step ${step?.n} · ${step?.label}`;
-                })()}
-              </span>
+            <div className="search">
+              <input
+                value={thesisTicker}
+                onChange={(e) => setThesisTicker(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadThesis(thesisTicker)}
+                placeholder="e.g. TSLA"
+                className="ticker-input"
+              />
+              <button
+                onClick={() => loadThesis(thesisTicker)}
+                disabled={thesisLoading}
+                className="primary"
+              >
+                Load
+              </button>
             </div>
-            <p className="meta-text">This step is not built yet.</p>
+            {thesisLoading && <div className="status">Drafting thesis…</div>}
+            {thesisError && <div className="error-banner">{thesisError}</div>}
+            {thesis && (
+              <ThesisPanel
+                response={thesis}
+                onToggleDone={toggleThesisDone}
+                onSave={saveThesisDoc}
+                saving={thesisSaving}
+              />
+            )}
           </main>
         </div>
       )}

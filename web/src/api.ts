@@ -263,6 +263,32 @@ export interface ValuationResponse {
   valuation?: ValuationOutput;
 }
 
+export interface ThesisSectionDoc {
+  key: string;
+  heading: string;
+  content: string;
+}
+
+export interface ThesisSectionSave {
+  key: string;
+  content: string;
+}
+
+export interface ThesisDoc {
+  saved: boolean;
+  saved_at: string | null;
+  sections: ThesisSectionDoc[];
+}
+
+export interface ThesisResponse {
+  ticker: string;
+  locked: boolean;
+  done: Record<string, boolean>;
+  missing_steps: number[];
+  draft?: Artifact | null;
+  thesis?: ThesisDoc;
+}
+
 export interface ChatSource {
   text: string;
   item: string | null;
@@ -406,6 +432,18 @@ export function getValuation(
   return request<ValuationResponse>(
     `/api/steps/${ticker}/valuation${query ? `?${query}` : ""}`
   );
+}
+
+export function getThesis(ticker: string) {
+  return request<ThesisResponse>(`/api/steps/${ticker}/thesis`);
+}
+
+export function saveThesis(ticker: string, sections: ThesisSectionSave[]) {
+  return request<ThesisResponse>(`/api/steps/${ticker}/thesis`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sections }),
+  });
 }
 
 export function chatStep(
