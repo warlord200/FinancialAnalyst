@@ -118,6 +118,7 @@ class IngestService:
         chunker=None,
         num_10k: int = NUM_10K,
         num_10q: int = NUM_10Q,
+        smoke_eval=None,
     ) -> None:
         self.downloader = downloader
         self.registry = registry
@@ -128,6 +129,7 @@ class IngestService:
         self.chunker = chunker or chunk_documents
         self.num_10k = num_10k
         self.num_10q = num_10q
+        self.smoke_eval = smoke_eval
 
     def ingest(self, ticker: str) -> dict:
         ticker = ticker.upper()
@@ -177,7 +179,13 @@ class IngestService:
             },
         )
         self.job_store.update(job_id, progress=90)
-        return stats
+        result: dict = dict(stats)
+        if self.smoke_eval is not None:
+            try:
+                result["smoke"] = self.smoke_eval(ticker)
+            except Exception as exc:  # ingest succeeded; smoke is advisory
+                result["smoke_error"] = str(exc)
+        return result
 
     def get_job(self, job_id: str) -> dict | None:
         return self.job_store.get(job_id)
@@ -201,21 +209,43 @@ class IngestService:
         }
 
 
+def _build_smoke_eval(index):
+    """The post-ingest smoke eval: runs the per-company gate after a new
+    company's corpus is built. Returns a ``ticker -> dict`` callable that
+    embeds its queries through the configured embedder (already set by the
+    time an ingest job runs)."""
+    from financial_analyst.evaluation.corpus import snapshot
+    from financial_analyst.evaluation.smoke import run_smoke
+
+    def smoke_eval(ticker: str) -> dict:
+        retriever = ScopedRetriever(index)
+
+        def retrieve(query, items):
+            return retriever.retrieve(ticker, query, items=items, top_k=4)
+
+        chunks = snapshot(index, ticker)
+        return run_smoke(ticker, chunks, retrieve, samples_per_step=3)
+
+    return smoke_eval
+
+
 def get_ingest_service() -> IngestService:
     global _ingest_service
     if _ingest_service is not None:
         return _ingest_service
     _ensure_models()
+    ingest_index = CompanyIndex(chroma_path="./chroma_db", storage_base="./storage")
     _ingest_service = IngestService(
         downloader=SECDownloader(data_dir="./data"),
         registry=CacheRegistry("./storage/ingest_registry.json"),
-        index=CompanyIndex(chroma_path="./chroma_db", storage_base="./storage"),
+        index=ingest_index,
         job_store=JobStore("./storage/jobs.json"),
         runner=ThreadJobRunner(),
         reader=SECHtmlReader(),
         chunker=chunk_documents,
         num_10k=NUM_10K,
         num_10q=NUM_10Q,
+        smoke_eval=_build_smoke_eval(ingest_index),
     )
     return _ingest_service
 
@@ -278,3 +308,13 @@ def get_steps_service() -> StepsService:
         thesis_store=ThesisStore("./storage/steps.db"),
     )
     return _steps_service
+
+
+def get_eval_summary() -> dict | None:
+    """The dashboard snapshot the eval CLI wrote, or None when no run yet."""
+    from financial_analyst.evaluation.report import (
+        DEFAULT_DASHBOARD_PATH,
+        load_dashboard,
+    )
+
+    return load_dashboard(DEFAULT_DASHBOARD_PATH)

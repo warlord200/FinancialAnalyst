@@ -307,6 +307,70 @@ export interface ChatResponse {
   sources: ChatSource[];
 }
 
+export interface EvalMetrics {
+  num_queries: number;
+  mrr: number | null;
+  hit_rate: number | null;
+  ndcg: number | null;
+}
+
+export interface CuratedEvalEntry {
+  name: string;
+  ticker: string;
+  top_k: number;
+  config: string;
+  run_at: string;
+  per_step: Record<string, EvalMetrics>;
+  per_query?: {
+    question_id: string;
+    step: number | null;
+    all_expected_found: boolean;
+    mrr: number;
+    hit_rate: number;
+    ndcg: number | null;
+  }[];
+}
+
+export interface RegressionEvalEntry {
+  dataset: string;
+  config: string;
+  num_queries: number;
+  regressed: boolean;
+  regressions: string[];
+  mrr: number | null;
+  hit_rate: number | null;
+  ndcg: number | null;
+  baseline_mrr: number | null;
+  baseline_hit_rate: number | null;
+  baseline_ndcg: number | null;
+  delta_mrr: number | null;
+  delta_hit_rate: number | null;
+  delta_ndcg: number | null;
+}
+
+export interface SmokeStepResult {
+  samples: number;
+  skipped: boolean;
+  retrieval_hit_rate: number | null;
+  in_scope_rate: number | null;
+}
+
+export interface SmokeEvalEntry {
+  ticker: string;
+  run_at: string;
+  samples_per_step: number;
+  passed: boolean;
+  checks: Record<string, { items: string[]; items_present: string[]; items_missing: string[] }>;
+  steps: Record<string, SmokeStepResult>;
+}
+
+export interface EvalSummary {
+  generated_at: string | null;
+  curated: CuratedEvalEntry[];
+  regression: RegressionEvalEntry[];
+  smoke: SmokeEvalEntry[];
+}
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const TOKEN_KEY = "fa_token";
 
@@ -473,6 +537,10 @@ export function listIngested() {
 
 export function getIngestStats(ticker: string) {
   return request<IngestStats>(`/api/ingest/${ticker}/stats`);
+}
+
+export function getEvalSummary() {
+  return request<EvalSummary>("/api/eval/summary");
 }
 
 export function refreshNumbers(ticker: string) {

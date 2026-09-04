@@ -1,0 +1,241 @@
+{
+  "name": "tesla-analyst-2026",
+  "ticker": "TSLA",
+  "description": "Hand-curated real analyst questions over Tesla's live indexed corpus, grounded in the fiscal 2025 Form 10-K (filed 2026-01-29). Each question targets the dossier step an analyst asking it would be on: step 2 reads the business and risk Items (1/1A), step 3 reads the financial Items (7/8), step 4 reads the market/returns and MD&A Items (5/7), and a search-everything question spans the corpus. Ground truth references are verbatim snippets of the actual indexed chunks, so they survive a re-ingest that regenerates chunk ids.",
+  "top_k": 4,
+  "questions": [
+    {
+      "id": "s2q1",
+      "step": 2,
+      "question": "How does Tesla frame its pivot toward artificial intelligence and which vehicle and robot products is it commercializing around that strategy?",
+      "relevant": [
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "into the real world, through products and services like Full Self-Driving"
+        },
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "The Cybertruck is a full-size electric pickup truck with a stainless steel exterior"
+        }
+      ]
+    },
+    {
+      "id": "s2q2",
+      "step": 2,
+      "question": "What does Tesla disclose about how its used vehicle resale business supports new car sales, and about its insurance product?",
+      "relevant": [
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "Our used vehicle business supports new vehicle sales by integrating the trade-in of a customer's existing Tesla or non-Tesla vehicle"
+        },
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "In 2021, we launched our insurance product using real-time driving behavior in select states, which offers rates that are often better than other alternatives"
+        }
+      ]
+    },
+    {
+      "id": "s2q3",
+      "step": 2,
+      "question": "What supply-chain and demand risks does Tesla flag around lithium-ion battery cell supply and the adoption of autonomous driving?",
+      "relevant": [
+        {
+          "item": "ITEM 1A",
+          "fiscal_year": 2025,
+          "text": "We are dependent on the continued supply of lithium-ion battery cells for our vehicles and energy storage products"
+        },
+        {
+          "item": "ITEM 1A",
+          "fiscal_year": 2025,
+          "text": "Our future growth and success are dependent upon demand for our electric vehicles and adoption of autonomous driving solutions"
+        }
+      ]
+    },
+    {
+      "id": "s2q4",
+      "step": 2,
+      "question": "How did the OBBBA and related regulatory actions affect Tesla's regulatory credit programs, and what do the risk factors say about the loss of tax credits and carbon offset mechanisms?",
+      "relevant": [
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "regulatory actions, such as the OBBBA, have restricted certain regulatory credit programs tied to our products"
+        },
+        {
+          "item": "ITEM 1A",
+          "fiscal_year": 2025,
+          "text": "previously available tax credits and carbon offset mechanisms may further negatively impact our financial results"
+        }
+      ]
+    },
+    {
+      "id": "s3q1",
+      "step": 3,
+      "question": "What drove Tesla's fiscal 2025 gross margin down and research and development expense up?",
+      "relevant": [
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "Gross margin for total automotive & services and other segment decreased from 16.9% to 16.2% in the year ended December 31, 2025"
+        },
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "R&D expense increased $1.87 billion, or 41%, in the year ended December 31, 2025 as compared to the year ended December 31, 2024"
+        }
+      ]
+    },
+    {
+      "id": "s3q2",
+      "step": 3,
+      "question": "What does Tesla disclose about cash generation from operations and its committed credit facilities?",
+      "relevant": [
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "Our business has generally been consistently generating cash flow from operations in excess of our level of capital spend"
+        },
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "We had $6.43 billion of unused committed credit amounts as of December 31, 2025"
+        }
+      ]
+    },
+    {
+      "id": "s3q3",
+      "step": 3,
+      "question": "What were Tesla's net income attributable to common stockholders in fiscal 2025 and the share counts used to compute per-share earnings?",
+      "relevant": [
+        {
+          "item": "ITEM 8",
+          "fiscal_year": 2025,
+          "text": "Net income attributable to common stockholders"
+        },
+        {
+          "item": "ITEM 8",
+          "fiscal_year": 2025,
+          "text": "Weighted average shares used in computing net income per share of common stock, basic"
+        }
+      ]
+    },
+    {
+      "id": "s3q4",
+      "step": 3,
+      "question": "How does Tesla account for the digital assets it holds as crypto assets?",
+      "relevant": [
+        {
+          "item": "ITEM 8",
+          "fiscal_year": 2025,
+          "text": "We account for all digital assets held as crypto assets, a subset of indefinite-lived intangible assets"
+        }
+      ]
+    },
+    {
+      "id": "s4q1",
+      "step": 4,
+      "question": "Where does Tesla's common stock trade, and what does it say about cash dividends and issuer purchases of equity securities in fiscal 2025?",
+      "relevant": [
+        {
+          "item": "ITEM 5",
+          "fiscal_year": 2025,
+          "text": "Our common stock has traded on The NASDAQ Global Select Market under the symbol"
+        },
+        {
+          "item": "ITEM 5",
+          "fiscal_year": 2025,
+          "text": "we anticipate paying any such cash dividends in the foreseeable future"
+        }
+      ]
+    },
+    {
+      "id": "s4q2",
+      "step": 4,
+      "question": "How much energy storage did Tesla deploy in fiscal 2025 and where is it ramping its Megafactories?",
+      "relevant": [
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "In 2025, we deployed 46.7 GWh of energy storage products"
+        },
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "the ramps of our Megafactories in Shanghai and Lathrop, California, and the construction of a new Megafactory near Houston, Texas"
+        }
+      ]
+    },
+    {
+      "id": "s4q3",
+      "step": 4,
+      "question": "What does Tesla identify as its material cash requirements and sources of liquidity over the twelve months after December 31, 2025?",
+      "relevant": [
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "material requirements for cash in our business and our sources of liquidity"
+        },
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "We had $6.43 billion of unused committed credit amounts as of December 31, 2025"
+        }
+      ]
+    },
+    {
+      "id": "xq1",
+      "step": null,
+      "question": "How does Tesla describe the size and management of its workforce at the end of fiscal 2025?",
+      "relevant": [
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "our employee headcount worldwide was 134,785"
+        },
+        {
+          "item": "ITEM 1",
+          "fiscal_year": 2025,
+          "text": "Our Compensation Committee generally oversees our human capital management strategy"
+        }
+      ]
+    },
+    {
+      "id": "xq2",
+      "step": null,
+      "question": "What does Tesla disclose about automotive regulatory credit revenue and how the OBBBA changed the IRA incentives?",
+      "relevant": [
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "Fluctuations in automotive regulatory credits are impacted by our supply of credits"
+        },
+        {
+          "item": "ITEM 8",
+          "fiscal_year": 2025,
+          "text": "The IRA incentives were subsequently modified by the OBBBA enacted on July 4, 2025"
+        }
+      ]
+    },
+    {
+      "id": "xq3",
+      "step": null,
+      "question": "What does Tesla disclose about the CEO performance award and about stock-based compensation expense?",
+      "relevant": [
+        {
+          "item": "ITEM 8",
+          "fiscal_year": 2025,
+          "text": "the Company recorded stock-based compensation expense of $162 million related to the award"
+        },
+        {
+          "item": "ITEM 7",
+          "fiscal_year": 2025,
+          "text": "Stock-based compensation expense for equity awards is a non-cash expense"
+        }
+      ]
+    }
+  ]
+}

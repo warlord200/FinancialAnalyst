@@ -110,3 +110,10 @@ button.danger { padding: 10px 18px; font-size: 1.1rem; background: #fdecea; colo
   background: #e8f0fe; color: #0a66c2;
 }
 .peer-chip .link-button { font-size: 1rem; line-height: 1; }
+
+.eval-block { margin: 20px 0; }
+.eval-block h2 { margin: 0 0 8px; font-size: 1.05rem; }
+.eval-run { margin: 16px 0; }
+.badge { padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 0.78rem; white-space: nowrap; }
+.badge-pass { background: #e6f4ea; color: #137333; }
+.badge-fail { background: #fce8e6; color: #c5221f; }

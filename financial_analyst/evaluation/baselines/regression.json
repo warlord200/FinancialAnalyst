@@ -1,0 +1,14 @@
+{
+  "top_k": 4,
+  "description": "Measured with Qwen/Qwen3-Embedding-0.6B on Cloudflare Workers AI on 2026-09-04 (README METRICS 'Current measurement'), top_k=4, full corpora.",
+  "datasets": {
+    "2025_Microsoft": {
+      "vector": { "mrr": 0.785, "hit_rate": 0.917, "ndcg": 0.819 },
+      "hybrid": { "mrr": 0.754, "hit_rate": 0.929, "ndcg": 0.799 }
+    },
+    "2026_Tesla": {
+      "vector": { "mrr": 0.803, "hit_rate": 0.957, "ndcg": 0.842 },
+      "hybrid": { "mrr": 0.851, "hit_rate": 0.951, "ndcg": 0.877 }
+    }
+  }
+}

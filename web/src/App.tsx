@@ -5,6 +5,7 @@ import {
   clearPriceOverride,
   clearStepDone,
   getBusinessSwot,
+  getEvalSummary,
   getFinancials,
   getIngestJob,
   getIngestStats,
@@ -33,6 +34,7 @@ import {
   BusinessSwotResponse,
   ArtifactSection as ArtifactSectionData,
   ChatSource,
+  EvalSummary,
   FinancialsResponse,
   FinancialTable,
   IngestJob,
@@ -49,7 +51,7 @@ import {
 } from "./api";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
-type View = "ingest" | "step1" | "step2" | "step3" | "step4" | "step5" | "step6" | "numbers";
+type View = "ingest" | "step1" | "step2" | "step3" | "step4" | "step5" | "step6" | "numbers" | "eval";
 
 const DOSSIER_STEPS = [
   { n: 1, label: "One-pager", view: "step1" as View },
@@ -59,6 +61,13 @@ const DOSSIER_STEPS = [
   { n: 5, label: "Valuation", view: "step5" as View },
   { n: 6, label: "Thesis", view: "step6" as View },
 ];
+
+const EVAL_STEP_LABELS: Record<string, string> = {
+  "2": "Step 2 · Business & SWOT",
+  "3": "Step 3 · Financials",
+  "4": "Step 4 · Strategy",
+  search_all: "Search everything",
+};
 
 function ChunkTable({ title, rows }: { title: string; rows: [string, number][] }) {
   return (
@@ -1234,6 +1243,10 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
 
+  const [evalSummary, setEvalSummary] = useState<EvalSummary | null>(null);
+  const [evalError, setEvalError] = useState("");
+  const [evalLoading, setEvalLoading] = useState(false);
+
   const loadQuota = useCallback(() => {
     getQuota()
       .then(setQuota)
@@ -1495,6 +1508,20 @@ export default function App() {
     }
   }
 
+  async function loadEval() {
+    if (evalLoading) return;
+    setEvalLoading(true);
+    setEvalError("");
+    try {
+      setEvalSummary(await getEvalSummary());
+    } catch (e) {
+      setEvalSummary(null);
+      setEvalError(e instanceof Error ? e.message : "Failed to load eval results");
+    } finally {
+      setEvalLoading(false);
+    }
+  }
+
   async function toggleThesisDone(step: number, done: boolean) {
     if (!thesisTicker || !thesis) return;
     setThesisError("");
@@ -1563,6 +1590,15 @@ export default function App() {
               ))}
               <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
                 Financials
+              </button>
+              <button
+                className={view === "eval" ? "tab active" : "tab"}
+                onClick={() => {
+                  setView("eval");
+                  loadEval();
+                }}
+              >
+                Eval
               </button>
             </nav>
           </header>
@@ -1840,6 +1876,32 @@ export default function App() {
             )}
           </main>
         </div>
+      ) : view === "eval" ? (
+        <div className="layout">
+          <main className="content">
+            <div className="report-meta">
+              <span className="meta-text">
+                Retrieval-quality gate · updated{" "}
+                {evalSummary?.generated_at
+                  ? new Date(evalSummary.generated_at).toLocaleString()
+                  : "never"}
+              </span>
+            </div>
+            <div className="search">
+              <button onClick={loadEval} disabled={evalLoading} className="primary">
+                Refresh
+              </button>
+            </div>
+            {evalLoading && <div className="status">Loading eval results…</div>}
+            {evalError && <div className="error-banner">{evalError}</div>}
+            {!evalLoading && !evalError && evalSummary && <EvalPanel summary={evalSummary} />}
+            {!evalLoading && !evalError && !evalSummary && (
+              <div className="status">
+                No eval results yet — run the eval CLI (python -m financial_analyst.evaluation.cli).
+              </div>
+            )}
+          </main>
+        </div>
       ) : (
         <div className="layout">
           <main className="content">
@@ -1875,5 +1937,148 @@ export default function App() {
         </>
       )}
     </div>
+  );
+}
+
+function EvalPanel({ summary }: { summary: EvalSummary }) {
+  const hasAny =
+    summary.curated.length > 0 ||
+    summary.regression.length > 0 ||
+    summary.smoke.length > 0;
+  if (!hasAny) {
+    return (
+      <div className="status">
+        No eval results yet — run the eval CLI (python -m financial_analyst.evaluation.cli
+        curated | regression | smoke).
+      </div>
+    );
+  }
+
+  const fmt = (v: number | null | undefined) =>
+    v === null || v === undefined ? "n/a" : v.toFixed(3);
+  const fmtDelta = (v: number | null | undefined) =>
+    v === null || v === undefined ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(3)}`;
+  const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : "");
+
+  return (
+    <article>
+      {summary.curated.length > 0 && (
+        <section className="eval-block">
+          <h2>Curated Tesla benchmark · per-step retrieval</h2>
+          {summary.curated.map((entry) => (
+            <div key={`${entry.name}-${entry.config}-${entry.run_at}`} className="eval-run">
+              <div className="report-meta">
+                <span className="meta-text">
+                  {entry.name} · {entry.ticker} · {entry.config} · top_k {entry.top_k} ·{" "}
+                  {when(entry.run_at)}
+                </span>
+              </div>
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th className="row-label">Dossier step</th>
+                    <th>Queries</th>
+                    <th>MRR</th>
+                    <th>Hit rate</th>
+                    <th>NDCG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(entry.per_step).map(([step, m]) => (
+                    <tr key={step}>
+                      <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
+                      <td>{m.num_queries}</td>
+                      <td>{fmt(m.mrr)}</td>
+                      <td>{fmt(m.hit_rate)}</td>
+                      <td>{fmt(m.ndcg)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {summary.regression.length > 0 && (
+        <section className="eval-block">
+          <h2>Synthetic regression sets · continuity vs baseline</h2>
+          <table className="matrix">
+            <thead>
+              <tr>
+                <th className="row-label">Dataset</th>
+                <th>Config</th>
+                <th>Queries</th>
+                <th>MRR</th>
+                <th>Hit rate</th>
+                <th>NDCG</th>
+                <th>Baseline MRR</th>
+                <th>Δ MRR</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {summary.regression.map((r) => (
+                <tr key={`${r.dataset}-${r.config}`}>
+                  <td className="row-label">{r.dataset}</td>
+                  <td>{r.config}</td>
+                  <td>{r.num_queries}</td>
+                  <td>{fmt(r.mrr)}</td>
+                  <td>{fmt(r.hit_rate)}</td>
+                  <td>{fmt(r.ndcg)}</td>
+                  <td>{fmt(r.baseline_mrr)}</td>
+                  <td>{fmtDelta(r.delta_mrr)}</td>
+                  <td>
+                    <span className={r.regressed ? "badge badge-fail" : "badge badge-pass"}>
+                      {r.regressed
+                        ? `REGRESSION${r.regressions.length ? `: ${r.regressions.join(", ")}` : ""}`
+                        : "OK"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {summary.smoke.length > 0 && (
+        <section className="eval-block">
+          <h2>Per-company smoke evals</h2>
+          {summary.smoke.map((s) => (
+            <div key={`${s.ticker}-${s.run_at}`} className="eval-run">
+              <div className="report-meta">
+                <span className="meta-text">{s.ticker} · {when(s.run_at)} · </span>
+                <span className={s.passed ? "badge badge-pass" : "badge badge-fail"}>
+                  {s.passed ? "PASS" : "FAIL"}
+                </span>
+              </div>
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th className="row-label">Step</th>
+                    <th>Samples</th>
+                    <th>Self-hit rate</th>
+                    <th>In-scope rate</th>
+                    <th>Missing scope items</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(s.steps).map(([step, r]) => (
+                    <tr key={step}>
+                      <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
+                      <td>{r.skipped ? "skipped" : r.samples}</td>
+                      <td>{r.skipped ? "n/a" : fmt(r.retrieval_hit_rate)}</td>
+                      <td>{r.skipped ? "n/a" : fmt(r.in_scope_rate)}</td>
+                      <td>{s.checks[step]?.items_missing.join(", ") || "none"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </section>
+      )}
+    </article>
   );
 }

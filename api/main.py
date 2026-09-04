@@ -503,6 +503,16 @@ def create_app() -> FastAPI:
         ticker = ticker.upper()
         return _get_numbers_service().set_price_override(ticker, override.price)
 
+    @app.get("/api/eval/summary")
+    def eval_summary(user: CurrentUser):
+        summary = _load_eval_summary()
+        if summary is None:
+            raise HTTPException(
+                status_code=404,
+                detail="No eval results yet; run the eval CLI first.",
+            )
+        return summary
+
     @app.delete("/api/numbers/{ticker}/price")
     def clear_price_override(ticker: str):
         ticker = ticker.upper()
@@ -533,6 +543,10 @@ def _get_quota_service():
 
 def _get_steps_service():
     return services.get_steps_service()
+
+
+def _load_eval_summary():
+    return services.get_eval_summary()
 
 
 app = create_app()
