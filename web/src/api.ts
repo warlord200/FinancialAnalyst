@@ -364,7 +364,11 @@ export interface EvalSummary {
   smoke: SmokeEvalEntry[];
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+// Same-origin by default: in dev the Vite server proxies /api to the
+// backend (see vite.config.ts), and in production the web server serves
+// both the built app and /api from the same origin. Set VITE_API_BASE to
+// an absolute URL to point the app at a backend on another origin.
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 const TOKEN_KEY = "fa_token";
 
 export function setToken(token: string | null) {

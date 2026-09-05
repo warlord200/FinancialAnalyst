@@ -1,0 +1,24 @@
+# FinancialAnalyst — Caddy web server config.
+# Serves the built React app and reverse-proxies the FastAPI backend,
+# both over automatic HTTPS (Let's Encrypt). Replace DOMAIN below with
+# the public hostname (deploy/setup.sh does this substitution).
+
+https://DOMAIN {
+    encode zstd gzip
+
+    # API and health checks go to the uvicorn process (127.0.0.1:8000).
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+    handle /health {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # The built single-page app, with index.html fallback.
+    root * {{APP_DIR}}/web/dist
+    @not_file {
+        not file
+    }
+    rewrite @not_file /index.html
+    file_server
+}

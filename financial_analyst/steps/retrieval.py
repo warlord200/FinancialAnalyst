@@ -27,7 +27,6 @@ harness (``tests/test_llamaindex_agent.py``) and documented in README.
 import asyncio
 import os
 import re
-import torch
 from dataclasses import dataclass
 
 import chromadb
@@ -240,9 +239,16 @@ class CrossEncoderReranker:
         max_length: int = 512,
     ) -> None:
         self.model_name = model_name
-        self.device = device or str(
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        )
+        self.device = device
+        if self.device is None:
+            # torch is only imported when a reranker is actually used, so
+            # the server does not need it installed (or the ~GB CUDA wheel)
+            # unless RERANKER_MODEL is configured.
+            import torch
+
+            self.device = str(
+                torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            )
         self.max_length = max_length
         self._model = None
 

@@ -1,0 +1,17 @@
+[Unit]
+Description=FinancialAnalyst background worker (ingest jobs)
+After=network.target financial-analyst-api.service
+Wants=financial-analyst-api.service
+
+[Service]
+Type=simple
+User=financial-analyst
+Group=financial-analyst
+WorkingDirectory={{APP_DIR}}
+EnvironmentFile={{APP_DIR}}/.env
+ExecStart={{APP_DIR}}/.venv/bin/python -m api.worker
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
