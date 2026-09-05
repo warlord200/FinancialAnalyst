@@ -12,6 +12,9 @@
 # obtains a Let's Encrypt certificate for it automatically. APP_DIR (the
 # repo's location on the VM, default /opt/financial-analyst) may also be
 # overridden; the Caddyfile and systemd units are rendered to match.
+#
+# The free Azure for Students VM (B2ats_v2) has 1 GiB RAM; this script
+# adds a 2 GiB swap file so Chroma + ingest parsing have headroom.
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/financial-analyst}"
@@ -32,6 +35,21 @@ cd "$APP_DIR"
 if [[ ! -f "$APP_DIR/.env" ]]; then
     echo "missing $APP_DIR/.env (copy deploy/.env.example and fill secrets)" >&2
     exit 1
+fi
+
+echo "==> enabling swap (small-RAM free VMs need the headroom)"
+if ! swapon --show | grep -q '^/swapfile'; then
+    if ! command -v fallocate >/dev/null 2>&1; then
+        echo "fallocate not available; using dd" >&2
+        dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    else
+        fallocate -l 2G /swapfile
+    fi
+    chmod 600 /swapfile
+    mkswap /swapfile >/dev/null
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    sysctl -w vm.swappiness=10 >/dev/null
 fi
 
 echo "==> installing system packages"

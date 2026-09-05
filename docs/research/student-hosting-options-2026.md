@@ -2,6 +2,23 @@
 
 Researched 2026-08-29 against primary sources (official pricing/docs pages). App needs: FastAPI + static React frontend, ChromaDB (persistent on-disk vector store) + SQLite, sentence-transformers bge-m3 (~570M params) on CPU, always-on background worker (SEC filings → embeddings), outbound calls to SEC EDGAR / yfinance / DeepSeek. Realistic budget: 2–4 GB RAM, a few vCPUs, a few GB disk, ALWAYS-ON (no sleep-after-idle).
 
+## Correction (5 Sep 2026): the free B-series v2 VMs have 1 GiB RAM, not 4 GB
+
+The tables below repeat "B2pts_v2 / B2ats_v2 = 2 vCPU / 4 GB". That is wrong.
+Per the current Microsoft size tables (learn.microsoft.com Basv2/Bpsv2-series),
+the Azure for Students free 750 h/mo VMs are:
+
+- `B1s` = 1 vCPU / 1 GiB
+- `B2pts_v2` (ARM) = 2 vCPU / 1 GiB
+- `B2ats_v2` (AMD/x86) = 2 vCPU / 1 GiB
+
+The 4 GiB siblings (`B2pls_v2` ARM, `B2als_v2` AMD) are real but NOT in the
+free allotment — running one would draw on the $100 credit. Bottom line for
+this app: take the free `B2ats_v2` (2 vCPU / 1 GiB, x86) and add a 2 GiB swap
+file (deploy/setup.sh does this), or step up to a paid 4 GiB size from the
+credit. With embedding now off-box (Cloudflare, ADR 0001), 1 GiB + swap is
+workable for the always-on FastAPI + worker + ChromaDB + SQLite.
+
 ## Update (4 Sep 2026): embedding moved off-box to Cloudflare Workers AI
 
 The embed model (now **Qwen/Qwen3-Embedding-0.6B**, see `docs/adr/0001-single-embed-model-qwen3.md`) no longer runs on the host. It is served by **Cloudflare Workers AI** (free tier, 10,000 neurons/day; the model costs 1075 neurons/M tokens). AAPL's 403-chunk corpus is ~190 neurons per re-ingest — roughly 50 full re-ingests/day fit in the free tier. Consequences for this research:

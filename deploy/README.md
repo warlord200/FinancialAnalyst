@@ -37,10 +37,12 @@ it requeues the interrupted job on startup. Set `JOB_RUNNER=worker` in
 
 ## Live checklist
 
-1. **Provision the VM** (Azure for Students): a `B2ats_v2` (2 vCPU / 4 GB,
-   x86) running **Ubuntu 24.04 LTS**, with a persistent OS disk. Open
-   inbound ports **22** (SSH), **80**, and **443** in the network security
-   group. Note the public IP.
+1. **Provision the VM** (Azure for Students): a free `B2ats_v2` (2 vCPU /
+   1 GiB, x86 — the free student VMs are 1 GiB; see the size table on
+   Microsoft Learn) running **Ubuntu 24.04 LTS**, with a persistent OS
+   disk. `setup.sh` adds a swap file automatically, which covers ingest
+   memory spikes. Open inbound ports **22** (SSH), **80**, and **443** in
+   the network security group. Note the public IP.
 2. **Pick the hostname.** Either buy/register a domain (free option: the
    GitHub Student Pack) and point an `A` record at the VM's public IP, or
    reuse Azure's own `<vm-name>.<region>.cloudapp.azure.com` name — both
