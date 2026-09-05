@@ -9,6 +9,7 @@ openai==2.43.0
 pandas==3.0.3
 pydantic==2.13.4
 python-dotenv==1.2.2
+PyJWT==2.13.0
 rank_bm25==0.2.2
 requests==2.34.2
 transformers==4.57.6

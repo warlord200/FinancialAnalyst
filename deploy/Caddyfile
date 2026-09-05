@@ -15,10 +15,9 @@ https://DOMAIN {
     }
 
     # The built single-page app, with index.html fallback.
-    root * {{APP_DIR}}/web/dist
-    @not_file {
-        not file
+    handle {
+        root * {{APP_DIR}}/web/dist
+        try_files {path} /index.html
+        file_server
     }
-    rewrite @not_file /index.html
-    file_server
 }
