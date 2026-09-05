@@ -1,23 +1,19 @@
-"""Unit tests for the Step 6 thesis (T12): the draft builder that seeds
-the thesis document, and the per-user thesis store that persists the
-user's edits.
+"""Unit tests for the Step 6 thesis (T12): the draft builder that produces
+the read-only thesis document.
 
 The draft is produced through the generation framework over the corpus:
 six grounded sections (what I hold, why, key assumptions, what would
 change my mind, devil's advocate, open research gaps), each citing the
 passages it drew on. The devil's advocate section is where the "argue
 the opposite side with grounded sources" requirement lives: its query
-and instruction must explicitly point at the negative evidence.
-
-The store is per-user and per-ticker, mirroring the other per-user state
-(done-marks, peer lists), so re-analysis that rebuilds the shared corpus
-and shared drafts never touches a saved thesis.
+and instruction must explicitly point at the negative evidence. The
+thesis is not editable: the document shown to the user is the grounded
+draft under canonical headings.
 """
 
 import pytest
 
 from financial_analyst.steps.generation import ArtifactGenerator
-from financial_analyst.steps.state import ThesisStore
 from financial_analyst.steps.thesis import (
     THESIS_SECTIONS,
     THESIS_TYPE,
@@ -104,33 +100,3 @@ class TestBuildThesis:
         generator = make_generator(corpus=[], )
         with pytest.raises(Exception):
             build_thesis(generator, "TSLA")
-
-
-class TestThesisStore:
-    def test_get_missing_returns_none(self, tmp_path):
-        store = ThesisStore(str(tmp_path / "steps.db"))
-        assert store.get("a@example.com", "TSLA") is None
-
-    def test_save_and_get_round_trip(self, tmp_path):
-        store = ThesisStore(str(tmp_path / "steps.db"))
-        saved = store.save("a@example.com", "TSLA", {"hold": "I hold TSLA."})
-        assert saved["content"]["hold"] == "I hold TSLA."
-        assert saved["saved_at"]
-        doc = store.get("a@example.com", "TSLA")
-        assert doc["content"] == {"hold": "I hold TSLA."}
-        assert doc["saved_at"] == saved["saved_at"]
-
-    def test_thesis_is_scoped_to_user_and_ticker(self, tmp_path):
-        store = ThesisStore(str(tmp_path / "steps.db"))
-        store.save("a@example.com", "TSLA", {"hold": "a thesis"})
-        assert store.get("b@example.com", "TSLA") is None
-        assert store.get("a@example.com", "MSFT") is None
-        assert store.get("a@example.com", "TSLA") is not None
-
-    def test_save_overwrites_and_stamps_a_new_saved_at(self, tmp_path):
-        store = ThesisStore(str(tmp_path / "steps.db"))
-        first = store.save("a@example.com", "TSLA", {"hold": "v1"})
-        second = store.save("a@example.com", "TSLA", {"hold": "v2", "why": "because"})
-        assert second["saved_at"] >= first["saved_at"]
-        doc = store.get("a@example.com", "TSLA")
-        assert doc["content"] == {"hold": "v2", "why": "because"}

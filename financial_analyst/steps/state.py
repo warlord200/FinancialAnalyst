@@ -2,13 +2,12 @@
 
 The one-pager content is shared (it is derived from the shared numbers
 layer), but the accept/reject gate on step 1, the peer lists a user picks
-for a company, the done-marks that unlock valuation, and each user's
-saved thesis document are private to each user.
+for a company, and the done-marks that unlock valuation are private to
+each user.
 """
 
 from contextlib import closing
 from datetime import datetime, timezone
-import json
 
 from financial_analyst.storage.sqlite import connect
 
@@ -39,16 +38,6 @@ CREATE TABLE IF NOT EXISTS peers (
     peer TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (email, ticker, peer)
-);
-"""
-
-THESIS_SCHEMA = """
-CREATE TABLE IF NOT EXISTS theses (
-    email TEXT NOT NULL,
-    ticker TEXT NOT NULL,
-    content TEXT NOT NULL,
-    saved_at TEXT NOT NULL,
-    PRIMARY KEY (email, ticker)
 );
 """
 
@@ -160,49 +149,3 @@ class PeerStateStore:
             )
             conn.commit()
         return list(peers)
-
-
-class ThesisStore:
-    """Per-user, per-ticker thesis documents, in SQLite.
-
-    A saved thesis is the user's own durable judgment: it is private state
-    keyed by (email, ticker), kept separate from the shared drafts and the
-    shared corpus so that re-analysis (which rebuilds corpus and drafts)
-    never touches it. The document is a JSON mapping of section key to the
-    user's edited text, alongside a timestamp for the last save.
-    """
-
-    def __init__(self, db_path: str) -> None:
-        self.db_path = db_path
-        with closing(connect(db_path, THESIS_SCHEMA)):
-            pass
-
-    def get(self, email: str, ticker: str) -> dict | None:
-        with closing(connect(self.db_path, THESIS_SCHEMA)) as conn:
-            row = conn.execute(
-                "SELECT content, saved_at FROM theses"
-                " WHERE email = ? AND ticker = ?",
-                (email, ticker.upper()),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "content": json.loads(row["content"]),
-            "saved_at": row["saved_at"],
-        }
-
-    def save(self, email: str, ticker: str, content: dict) -> dict:
-        """Store the user's edited thesis sections for (email, ticker)."""
-        ticker = ticker.upper()
-        saved_at = datetime.now(timezone.utc).isoformat()
-        with closing(connect(self.db_path, THESIS_SCHEMA)) as conn:
-            conn.execute(
-                "INSERT INTO theses (email, ticker, content, saved_at)"
-                " VALUES (?, ?, ?, ?)"
-                " ON CONFLICT(email, ticker)"
-                " DO UPDATE SET content = excluded.content,"
-                " saved_at = excluded.saved_at",
-                (email, ticker, json.dumps(content), saved_at),
-            )
-            conn.commit()
-        return {"content": content, "saved_at": saved_at}

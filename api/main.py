@@ -25,7 +25,6 @@ from financial_analyst.steps import STEP_ONE
 from financial_analyst.steps.chat import UnsupportedStepError
 from financial_analyst.steps.generation import ArtifactValidationError, NoSourceError
 from financial_analyst.steps.retrieval import EmbedModelMismatchError
-from financial_analyst.steps.thesis import thesis_section_keys
 
 
 class PriceOverride(BaseModel):
@@ -49,15 +48,6 @@ class ChatRequest(BaseModel):
 
 class PeersRequest(BaseModel):
     peers: list[str]
-
-
-class ThesisSection(BaseModel):
-    key: str
-    content: str
-
-
-class ThesisSaveRequest(BaseModel):
-    sections: list[ThesisSection]
 
 
 def _no_source_detail(ticker: str) -> str:
@@ -397,37 +387,6 @@ def create_app() -> FastAPI:
         ticker = ticker.upper()
         try:
             result = _get_steps_service().thesis(user["email"], ticker)
-        except ArtifactValidationError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Could not produce a grounded draft: {exc}",
-            )
-        except EmbedModelMismatchError as exc:
-            raise HTTPException(
-                status_code=503,
-                detail=str(exc),
-            )
-        if result is None:
-            raise HTTPException(
-                status_code=404,
-                detail=_no_source_detail(ticker),
-            )
-        return result
-
-    @app.put("/api/steps/{ticker}/thesis")
-    def save_thesis(ticker: str, body: ThesisSaveRequest, user: CurrentUser):
-        ticker = ticker.upper()
-        allowed = set(thesis_section_keys())
-        unknown = [s.key for s in body.sections if s.key not in allowed]
-        if unknown:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Unknown thesis sections: {', '.join(unknown)}",
-            )
-        try:
-            result = _get_steps_service().save_thesis(
-                user["email"], ticker, [s.model_dump() for s in body.sections]
-            )
         except ArtifactValidationError as exc:
             raise HTTPException(
                 status_code=502,

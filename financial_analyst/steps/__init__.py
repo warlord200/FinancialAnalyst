@@ -6,10 +6,10 @@ the target on growth, margins, debt, and returns, all from the numbers
 layer); T11 adds step 5 (Valuation): a numbers-derived DCF with a
 sensitivity table plus market multiples against the company's own history
 and its peers, hard-gated behind per-user done-marks on steps 1-4; T12
-adds step 6 (Thesis): a drafted, editable, per-user thesis (what I hold,
-why, key assumptions, what would change my mind) plus a corpus-grounded
-devil's-advocate section and open research gaps, persisted so reopening
-the ticker and re-analysis keep it. Step 6 is gated on the same done-marks
+adds step 6 (Thesis): a read-only, corpus-grounded thesis (what I hold,
+why, key assumptions, what would change my mind) plus a devil's-advocate
+section and open research gaps, drafted over the dossier and shown under
+canonical headings. Step 6 is gated on the same done-marks
 as valuation.
 
 ``STEP_SCOPES`` maps each step that drafts over the corpus to the filing

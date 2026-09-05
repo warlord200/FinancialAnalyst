@@ -24,7 +24,6 @@ import {
   logout,
   markStepDone,
   refreshNumbers,
-  saveThesis,
   setPeers,
   setPriceOverride,
   setStepGate,
@@ -873,36 +872,15 @@ function ValuationPanel({
 function ThesisPanel({
   response,
   onToggleDone,
-  onSave,
-  saving,
 }: {
   response: ThesisResponse;
   onToggleDone: (step: number, done: boolean) => void;
-  onSave: (sections: { key: string; content: string }[]) => Promise<void>;
-  saving: boolean;
 }) {
   const thesis = response.thesis ?? null;
-  const [edits, setEdits] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!thesis) return;
-    setEdits(
-      Object.fromEntries(thesis.sections.map((s) => [s.key, s.content]))
-    );
-  }, [thesis, response.ticker]);
 
   const draftByKey = new Map(
     (response.draft?.sections ?? []).map((s) => [s.key, s])
   );
-
-  function save() {
-    const sections = thesis?.sections.map((s) => ({
-      key: s.key,
-      content: edits[s.key] ?? s.content,
-    }));
-    if (!sections) return;
-    onSave(sections);
-  }
 
   return (
     <section>
@@ -911,9 +889,6 @@ function ThesisPanel({
           Step 6 · Thesis · {response.ticker} · locked until you mark steps
           1-4 done, so the thesis follows the whole dossier.
         </span>
-        {thesis?.saved && thesis.saved_at && (
-          <span className="meta-text">saved {thesis.saved_at.slice(0, 10)}</span>
-        )}
       </div>
 
       <div className="peer-list">
@@ -936,8 +911,8 @@ function ThesisPanel({
 
       {!thesis ? (
         <div className="status">
-          Thesis locked. Finish reviewing the steps above to draft and save
-          your thesis.
+          Thesis locked. Finish reviewing the steps above to draft your
+          thesis.
         </div>
       ) : (
         <div className="thesis-editor">
@@ -946,17 +921,7 @@ function ThesisPanel({
             return (
               <section key={section.key} className="matrix-block">
                 <h2>{section.heading}</h2>
-                <textarea
-                  value={edits[section.key] ?? section.content}
-                  onChange={(e) =>
-                    setEdits((prev) => ({
-                      ...prev,
-                      [section.key]: e.target.value,
-                    }))
-                  }
-                  rows={5}
-                  className="thesis-textarea"
-                />
+                <div className="artifact-content">{section.content}</div>
                 {draft && draft.sources.length > 0 && (
                   <>
                     <div className="source-tags">
@@ -985,14 +950,6 @@ function ThesisPanel({
               </section>
             );
           })}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="primary"
-            style={{ marginTop: 12 }}
-          >
-            {saving ? "Saving…" : "Save thesis"}
-          </button>
         </div>
       )}
     </section>
@@ -1238,7 +1195,6 @@ export default function App() {
   const [thesisTicker, setThesisTicker] = useState("");
   const [thesisError, setThesisError] = useState("");
   const [thesisLoading, setThesisLoading] = useState(false);
-  const [thesisSaving, setThesisSaving] = useState(false);
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
@@ -1534,21 +1490,6 @@ export default function App() {
       setThesis(await getThesis(thesisTicker));
     } catch (e) {
       setThesisError(e instanceof Error ? e.message : "Failed to save done mark");
-    }
-  }
-
-  async function saveThesisDoc(
-    sections: { key: string; content: string }[]
-  ) {
-    if (!thesisTicker) return;
-    setThesisSaving(true);
-    setThesisError("");
-    try {
-      setThesis(await saveThesis(thesisTicker, sections));
-    } catch (e) {
-      setThesisError(e instanceof Error ? e.message : "Failed to save thesis");
-    } finally {
-      setThesisSaving(false);
     }
   }
 
@@ -1927,8 +1868,6 @@ export default function App() {
               <ThesisPanel
                 response={thesis}
                 onToggleDone={toggleThesisDone}
-                onSave={saveThesisDoc}
-                saving={thesisSaving}
               />
             )}
           </main>

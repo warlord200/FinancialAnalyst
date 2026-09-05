@@ -1,13 +1,14 @@
 """Step 6: the Thesis.
 
-The final artifact of the dossier. The thesis document is an editable,
-per-user summary of the investor's own judgment — what they would hold,
-why, the key assumptions it rests on, and what would change their mind —
-plus a devil's advocate section arguing the opposite side and a list of
-open research gaps. It is drafted (seeded) over the corpus so the devil's
-advocate and gaps are grounded by construction in source passages; the
-user then edits the seeded text to their own final judgment and the
-edited document is persisted per user.
+The final artifact of the dossier. The thesis document is a read-only,
+source-tagged summary of the investment case — what the investor would
+hold, why, the key assumptions it rests on, and what would change their
+mind — plus a devil's advocate section arguing the opposite side and a
+list of open research gaps. It is drafted over the corpus so the devil's
+advocate and gaps are grounded by construction in source passages. The
+document is not editable: it is the grounded draft presented under the
+canonical headings below, and it is cached per ticker so repeat views are
+instant and stable.
 
 The draft has six sections, each grounded like the other drafted
 artifacts (steps 2-4): every section cites the source passages it drew
@@ -125,8 +126,8 @@ def thesis_section_keys() -> list[str]:
 def build_thesis(generator, ticker: str) -> Artifact:
     """Draft the six grounded thesis sections over the dossier corpus.
 
-    The returned artifact's sections seed the user's editable thesis
-    document: content to edit, with the source tags and evidence the
-    draft was grounded on attached to each section.
+    The returned artifact *is* the thesis: the read-only document shown to
+    the user is its content under the canonical headings, with the source
+    tags and evidence it was grounded on attached to each section.
     """
     return generator.generate(ticker, THESIS_TYPE, THESIS_SECTIONS)
