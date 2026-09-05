@@ -67,7 +67,7 @@ def make_client(tmp_path, monkeypatch, filings_by_ticker):
         index=CompanyIndex(
             chroma_path=str(tmp_path / "chroma"), storage_base=str(tmp_path / "storage")
         ),
-        job_store=JobStore(str(tmp_path / "storage" / "jobs.json")),
+        job_store=JobStore(str(tmp_path / "storage" / "jobs.db")),
         runner=InlineJobRunner(),
         reader=SECHtmlReader(),
         chunker=chunk_documents,

@@ -12,7 +12,12 @@ from financial_analyst.auth.tokens import load_or_create_secret
 from financial_analyst.auth.users import AuthService, UserStore
 from financial_analyst.indexing.company_index import CompanyIndex
 from financial_analyst.ingestion.sec_downloader import SECDownloader, TickerNotFoundError
-from financial_analyst.jobs import JobRunner, JobStore, ThreadJobRunner
+from financial_analyst.jobs import (
+    JobRunner,
+    JobStore,
+    QueueJobRunner,
+    ThreadJobRunner,
+)
 from financial_analyst.numbers.prices import PriceStore, YahooFinancePriceClient
 from financial_analyst.numbers.service import NumbersService, NumbersStore
 from financial_analyst.numbers.xbrl import fetch_company_facts
@@ -28,7 +33,7 @@ from financial_analyst.steps.retrieval import (
     reranker_from_env,
 )
 from financial_analyst.steps.service import StepsService
-from financial_analyst.steps.state import PeerStateStore, StepStateStore, ThesisStore
+from financial_analyst.steps.state import PeerStateStore, StepStateStore
 from financial_analyst.storage.registry import CacheRegistry
 
 _analyzer: Analyzer | None = None
@@ -150,6 +155,14 @@ class IngestService:
             "job_id": job["id"],
         }
 
+    def run_job(self, job: dict) -> dict:
+        """Run one claimed ingest job synchronously in this process.
+
+        This is the worker-facing entrypoint: the background worker claims a
+        job and calls this to execute the ingest pipeline for its ticker.
+        """
+        return self._ingest_sync(job["ticker"], job["id"])
+
     def _ingest_sync(self, ticker: str, job_id: str) -> dict:
         self.job_store.update(job_id, status="running", progress=20)
         filings = self.downloader.download_filings(
@@ -229,6 +242,24 @@ def _build_smoke_eval(index):
     return smoke_eval
 
 
+def _build_job_runner() -> JobRunner:
+    """The ingest job runner for this process, from ``JOB_RUNNER``.
+
+    ``thread`` (the default) runs jobs in a daemon thread inside the API
+    process, which is right for local single-process use. ``worker`` makes
+    the API enqueue-only (``QueueJobRunner``): the separate background
+    worker process claims and runs the job, so ingests survive API
+    restarts. The worker process itself always drives the store directly,
+    so it does not read this setting.
+    """
+    mode = os.getenv("JOB_RUNNER", "thread").strip().lower()
+    if mode == "thread":
+        return ThreadJobRunner()
+    if mode == "worker":
+        return QueueJobRunner()
+    raise RuntimeError(f"Unknown JOB_RUNNER value: {mode!r} (expected 'thread' or 'worker')")
+
+
 def get_ingest_service() -> IngestService:
     global _ingest_service
     if _ingest_service is not None:
@@ -239,8 +270,8 @@ def get_ingest_service() -> IngestService:
         downloader=SECDownloader(data_dir="./data"),
         registry=CacheRegistry("./storage/ingest_registry.json"),
         index=ingest_index,
-        job_store=JobStore("./storage/jobs.json"),
-        runner=ThreadJobRunner(),
+        job_store=JobStore("./storage/jobs.db"),
+        runner=_build_job_runner(),
         reader=SECHtmlReader(),
         chunker=chunk_documents,
         num_10k=NUM_10K,
@@ -305,7 +336,6 @@ def get_steps_service() -> StepsService:
         draft_store=DraftStore("./storage/drafts.json"),
         chat_service=chat_service,
         peers_store=PeerStateStore("./storage/steps.db"),
-        thesis_store=ThesisStore("./storage/steps.db"),
     )
     return _steps_service
 

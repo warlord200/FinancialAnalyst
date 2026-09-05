@@ -84,7 +84,7 @@ def make_service(tmp_path, smoke_eval=None, filings_by_ticker=None):
         index=CompanyIndex(
             chroma_path=str(tmp_path / "chroma"), storage_base=str(tmp_path / "storage")
         ),
-        job_store=JobStore(str(tmp_path / "storage" / "jobs.json")),
+        job_store=JobStore(str(tmp_path / "storage" / "jobs.db")),
         runner=InlineJobRunner(),
         reader=SECHtmlReader(),
         chunker=chunk_documents,
