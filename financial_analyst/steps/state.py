@@ -108,6 +108,36 @@ class StepStateStore:
             )
             conn.commit()
 
+    def all_gates(self, email: str) -> dict[tuple[str, int], str]:
+        """Every gate the user has recorded, keyed by (ticker, step).
+
+        The portfolio dashboard needs each company's gate status in one
+        call, so this loads the whole user's gates in a single query
+        instead of one per ingested ticker.
+        """
+        with closing(connect(self.db_path, SCHEMA)) as conn:
+            rows = conn.execute(
+                "SELECT ticker, step, status FROM step_gates WHERE email = ?",
+                (email,),
+            ).fetchall()
+        return {(row["ticker"], row["step"]): row["status"] for row in rows}
+
+    def all_done(self, email: str) -> dict[str, set[int]]:
+        """Every done-mark the user has recorded, keyed by ticker.
+
+        Like :meth:`all_gates`, this is the single-query read the portfolio
+        uses instead of one query per ingested ticker.
+        """
+        with closing(connect(self.db_path, SCHEMA)) as conn:
+            rows = conn.execute(
+                "SELECT ticker, step FROM step_done WHERE email = ?",
+                (email,),
+            ).fetchall()
+        done: dict[str, set[int]] = {}
+        for row in rows:
+            done.setdefault(row["ticker"], set()).add(row["step"])
+        return done
+
 
 class PeerStateStore:
     """Per-user peer ticker lists for each company, in SQLite.

@@ -26,6 +26,8 @@ from financial_analyst.reader.sec_html_reader import SECHtmlReader
 from financial_analyst.steps.chat import ChatService
 from financial_analyst.steps.drafts import DraftStore
 from financial_analyst.steps.generation import ArtifactGenerator
+from financial_analyst.steps.library import LibraryStore
+from financial_analyst.steps.portfolio import PortfolioService
 from financial_analyst.steps.retrieval import (
     CloudflareEmbedding,
     EMBED_QUERY_INSTRUCTION,
@@ -42,6 +44,7 @@ _numbers_service: "NumbersService | None" = None
 _auth_service: "AuthService | None" = None
 _quota_service: "QuotaService | None" = None
 _steps_service: "StepsService | None" = None
+_portfolio_service: "PortfolioService | None" = None
 _embed_model = None
 _llm = None
 _draft_llm = None
@@ -338,6 +341,19 @@ def get_steps_service() -> StepsService:
         peers_store=PeerStateStore("./storage/steps.db"),
     )
     return _steps_service
+
+
+def get_portfolio_service() -> PortfolioService:
+    global _portfolio_service
+    if _portfolio_service is not None:
+        return _portfolio_service
+    _portfolio_service = PortfolioService(
+        registry=CacheRegistry("./storage/ingest_registry.json"),
+        numbers_store=get_numbers_service().store,
+        state_store=StepStateStore("./storage/steps.db"),
+        library_store=LibraryStore("./storage/steps.db"),
+    )
+    return _portfolio_service
 
 
 def get_eval_summary() -> dict | None:

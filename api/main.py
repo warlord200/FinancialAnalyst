@@ -462,6 +462,30 @@ def create_app() -> FastAPI:
         ticker = ticker.upper()
         return _get_numbers_service().set_price_override(ticker, override.price)
 
+    @app.get("/api/portfolio")
+    def get_portfolio(user: CurrentUser):
+        return _get_portfolio_service().portfolio(user["email"])
+
+    @app.get("/api/library")
+    def get_library(user: CurrentUser):
+        return _get_portfolio_service().library(user["email"])
+
+    @app.post("/api/library/{ticker}")
+    def save_to_library(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_portfolio_service().save_to_library(user["email"], ticker)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Not ingested: {ticker}")
+        return result
+
+    @app.delete("/api/library/{ticker}")
+    def unsave_from_library(ticker: str, user: CurrentUser):
+        ticker = ticker.upper()
+        result = _get_portfolio_service().unsave(user["email"], ticker)
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Not ingested: {ticker}")
+        return result
+
     @app.get("/api/eval/summary")
     def eval_summary(user: CurrentUser):
         summary = _load_eval_summary()
@@ -502,6 +526,10 @@ def _get_quota_service():
 
 def _get_steps_service():
     return services.get_steps_service()
+
+
+def _get_portfolio_service():
+    return services.get_portfolio_service()
 
 
 def _load_eval_summary():
