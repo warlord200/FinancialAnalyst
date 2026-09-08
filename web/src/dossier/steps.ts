@@ -54,6 +54,7 @@ export function stepLockReason(
   }
   if (n >= 5) {
     const missing = DONE_STEPS.filter((step) => !done[String(step)]);
+    if (missing.length === 0) return null;
     const list = missing.map((step) => `Step ${step}`).join(", ");
     return `Opens once Steps 2-4 are all marked done. Missing: ${list}.`;
   }

@@ -5,6 +5,8 @@ hits a gated endpoint must wire real auth/quota services against temp-dir
 SQLite files and sign in a user. This keeps that boilerplate in one place.
 """
 
+import os
+
 from fastapi.testclient import TestClient
 
 import api.main as main
@@ -20,8 +22,33 @@ GENEROUS_LIMITS = {
     "chat": {"verified": 100, "unverified": 100},
 }
 
+# The built-in limits quota.default_limits() returns when no QUOTA_* env vars
+# are set. Tests that mean "use the built-in defaults" must be hermetic: a
+# dev .env (or a pytest plugin that auto-loads it) must not change them.
+QUOTA_ENV_VARS = (
+    "QUOTA_ANALYSES_VERIFIED",
+    "QUOTA_ANALYSES_UNVERIFIED",
+    "QUOTA_CHAT_VERIFIED",
+    "QUOTA_CHAT_UNVERIFIED",
+)
+
+
+def builtin_limits() -> dict:
+    """Snapshot quota.default_limits() as if no QUOTA_* env vars were set."""
+    from financial_analyst.auth.quota import default_limits
+
+    saved = {name: os.environ.pop(name, None) for name in QUOTA_ENV_VARS}
+    try:
+        return default_limits()
+    finally:
+        for name, value in saved.items():
+            if value is not None:
+                os.environ[name] = value
+
 
 def make_auth_services(tmp_path, limits=None, today=None):
+    if limits is None:
+        limits = builtin_limits()
     db = str(tmp_path / "storage" / "auth.db")
     auth = AuthService(
         UserStore(db),

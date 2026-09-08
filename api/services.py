@@ -315,6 +315,7 @@ def get_quota_service() -> QuotaService:
     global _quota_service
     if _quota_service is not None:
         return _quota_service
+    config.load_env()
     _quota_service = QuotaService(
         store=QuotaStore("./storage/quota.db"),
     )

@@ -246,8 +246,8 @@ export function useDossier(onQuotaChange: () => void): Dossier {
     setProgressError("");
     try {
       const updated = done
-        ? await clearStepDone(symbol, step)
-        : await markStepDone(symbol, step);
+        ? await markStepDone(symbol, step)
+        : await clearStepDone(symbol, step);
       setProgress(updated);
       clearGatedSteps();
     } catch (e) {
