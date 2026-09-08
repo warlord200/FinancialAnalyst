@@ -25,11 +25,13 @@ export interface IngestResponse {
   ingested_at?: string;
 }
 
-export interface IngestedTicker {
+export interface PortfolioRow {
   ticker: string;
-  ingested_at?: string;
-  num_chunks?: number;
-  fiscal_years?: number[];
+  ingested_at: string | null;
+  numbers_ready: boolean;
+  gate: { status: "pending" | "accepted" | "rejected" };
+  done: Record<string, boolean>;
+  saved: boolean;
 }
 
 export interface Financials {
@@ -525,12 +527,8 @@ export function getIngestJob(jobId: string) {
   return request<IngestJob>(`/api/ingest/jobs/${jobId}`);
 }
 
-export function listIngested() {
-  return request<IngestedTicker[]>("/api/ingest");
-}
-
-export function getIngestStats(ticker: string) {
-  return request<IngestStats>(`/api/ingest/${ticker}/stats`);
+export function getPortfolio() {
+  return request<PortfolioRow[]>("/api/portfolio");
 }
 
 export function getEvalSummary() {

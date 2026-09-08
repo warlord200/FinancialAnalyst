@@ -3,13 +3,12 @@ import {
   clearPriceOverride,
   getEvalSummary,
   getIngestJob,
-  getIngestStats,
   getMe,
   getNumbers,
+  getPortfolio,
   getQuota,
   getToken,
   ingestTicker,
-  listIngested,
   login,
   logout,
   refreshNumbers,
@@ -20,19 +19,19 @@ import {
 import type {
   AuthUser,
   EvalSummary,
-  IngestedTicker,
   IngestJob,
-  IngestStats,
   NumbersResponse,
+  PortfolioRow,
   QuotaStatus,
 } from "./api";
 import { formatMoney, formatPercent } from "./dossier/format";
 import { useDossier } from "./dossier/useDossier";
 import { CompanyWorkspace } from "./dossier/companyWorkspace";
 import { NoCompanyPrompt } from "./dossier/noCompany";
+import { PortfolioView } from "./dossier/portfolioView";
 
-type Phase = "idle" | "ingesting" | "done" | "error";
-type Section = "ingest" | "dossier" | "numbers" | "eval";
+type Phase = "idle" | "ingesting" | "error";
+type Section = "portfolio" | "dossier" | "numbers" | "eval";
 
 const EVAL_STEP_LABELS: Record<string, string> = {
   "2": "Step 2 · Business & SWOT",
@@ -40,30 +39,6 @@ const EVAL_STEP_LABELS: Record<string, string> = {
   "4": "Step 4 · Strategy",
   search_all: "Search everything",
 };
-
-function ChunkTable({ title, rows }: { title: string; rows: [string, number][] }) {
-  return (
-    <>
-      <h2>{title}</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Chunks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, count]) => (
-            <tr key={label}>
-              <td>{label}</td>
-              <td>{count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-}
 
 function MatrixTable({
   title,
@@ -280,15 +255,17 @@ function AuthPanel({
 }
 
 export default function App() {
-  const [section, setSection] = useState<Section>("ingest");
+  const [section, setSection] = useState<Section>("portfolio");
   const [company, setCompany] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(1);
   const [phase, setPhase] = useState<Phase>("idle");
   const [tickerInput, setTickerInput] = useState("");
   const [job, setJob] = useState<IngestJob | null>(null);
-  const [stats, setStats] = useState<IngestStats | null>(null);
   const [error, setError] = useState("");
-  const [history, setHistory] = useState<IngestedTicker[]>([]);
+
+  const [portfolioRows, setPortfolioRows] = useState<PortfolioRow[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
+  const [portfolioError, setPortfolioError] = useState("");
 
   const [numbers, setNumbers] = useState<NumbersResponse | null>(null);
   const [numbersTicker, setNumbersTicker] = useState("");
@@ -341,23 +318,28 @@ export default function App() {
     setToken(null);
     setUser(null);
     setQuota(null);
+    setCompany(null);
+    setPortfolioRows([]);
+    setPortfolioError("");
+    setSection("portfolio");
   }
 
-  const refreshHistory = useCallback(() => {
-    listIngested()
-      .then(setHistory)
-      .catch(() => setHistory([]));
+  const refreshPortfolio = useCallback(() => {
+    if (!getToken()) return;
+    setPortfolioLoading(true);
+    setPortfolioError("");
+    getPortfolio()
+      .then(setPortfolioRows)
+      .catch((e) => {
+        setPortfolioRows([]);
+        setPortfolioError(e instanceof Error ? e.message : "Failed to load portfolio");
+      })
+      .finally(() => setPortfolioLoading(false));
   }, []);
 
   useEffect(() => {
-    refreshHistory();
-  }, [refreshHistory]);
-
-  async function openStats(symbol: string) {
-    const data = await getIngestStats(symbol);
-    setStats(data);
-    setPhase("done");
-  }
+    if (section === "portfolio" && user) refreshPortfolio();
+  }, [section, user, refreshPortfolio]);
 
   function openCompany(symbol: string) {
     dossier.reset();
@@ -366,13 +348,11 @@ export default function App() {
     setSection("dossier");
   }
 
-  async function handleOpenTicker(symbol: string) {
+  async function finishIngest(symbol: string) {
+    setPhase("idle");
     openCompany(symbol);
-    try {
-      await openStats(symbol);
-    } catch {
-      // stats are optional; the dossier is the destination
-    }
+    refreshPortfolio();
+    loadQuota();
   }
 
   async function run(symbol: string) {
@@ -380,14 +360,11 @@ export default function App() {
     if (!s) return;
     setPhase("ingesting");
     setError("");
-    setStats(null);
     setJob(null);
     try {
       const res = await ingestTicker(s);
       if (res.status === "cached") {
-        await handleOpenTicker(s);
-        refreshHistory();
-        loadQuota();
+        await finishIngest(s);
         return;
       }
       const jobId = res.job_id ?? "";
@@ -395,9 +372,7 @@ export default function App() {
         const current = await getIngestJob(jobId);
         setJob(current);
         if (current.status === "completed") {
-          await handleOpenTicker(s);
-          refreshHistory();
-          loadQuota();
+          await finishIngest(s);
           return;
         }
         if (current.status === "failed") {
@@ -446,9 +421,6 @@ export default function App() {
     setSection("numbers");
   }
 
-  const byItemRows = stats ? Object.entries(stats.chunks_by_item).sort() : [];
-  const byYearRows = stats ? Object.entries(stats.chunks_by_year).sort() : [];
-
   async function loadEval() {
     if (evalLoading) return;
     setEvalLoading(true);
@@ -489,8 +461,11 @@ export default function App() {
               </button>
             </div>
             <nav className="tabs">
-              <button className={activeSection("ingest")} onClick={() => setSection("ingest")}>
-                Ingest
+              <button
+                className={activeSection("portfolio")}
+                onClick={() => setSection("portfolio")}
+              >
+                Portfolio
               </button>
               {company && (
                 <button className={activeSection("dossier")} onClick={() => setSection("dossier")}>
@@ -512,8 +487,8 @@ export default function App() {
             </nav>
           </header>
 
-          {section === "ingest" ? (
-            <>
+          {section === "portfolio" ? (
+            <main className="content">
               <div className="search">
                 <input
                   value={tickerInput}
@@ -547,52 +522,27 @@ export default function App() {
 
               {phase === "error" && <div className="error-banner">{error}</div>}
 
-              <div className="layout">
-                <main className="content">
-                  {phase === "done" && stats && (
-                    <article>
-                      <div className="report-meta">
-                        <span className="meta-text">
-                          {stats.ticker} · ingested {stats.ingested_at.slice(0, 10)} ·{" "}
-                          {stats.num_chunks} chunks · fiscal years {stats.fiscal_years.join(", ")}
-                        </span>
-                      </div>
-                      <ChunkTable title="Chunks by Item" rows={byItemRows} />
-                      <ChunkTable title="Chunks by Fiscal Year" rows={byYearRows} />
-                    </article>
-                  )}
-                </main>
-
-                <aside className="sidebar">
-                  <h2>Ingested tickers</h2>
-                  {history.length === 0 && <p>Nothing ingested yet.</p>}
-                  <ul>
-                    {history.map((h) => (
-                      <li key={h.ticker}>
-                        <button onClick={() => handleOpenTicker(h.ticker)} className="history-link">
-                          {h.ticker}
-                          {h.fiscal_years?.length ? ` (${h.fiscal_years.join("/")})` : ""}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </aside>
-              </div>
-            </>
+              <PortfolioView
+                rows={portfolioRows}
+                loading={portfolioLoading}
+                error={portfolioError}
+                onOpenCompany={openCompany}
+              />
+            </main>
           ) : section === "dossier" ? (
             company ? (
               <CompanyWorkspace
                 ticker={company}
                 activeStep={activeStep}
                 onSelectStep={setActiveStep}
-                onBack={() => setSection("ingest")}
+                onBack={() => setSection("portfolio")}
                 onOpenNumbers={() => openNumbers(company)}
                 onQuotaChange={loadQuota}
                 dossier={dossier}
               />
             ) : (
               <main className="content">
-                <NoCompanyPrompt onOpenIngest={() => setSection("ingest")} />
+                <NoCompanyPrompt onOpenIngest={() => setSection("portfolio")} />
               </main>
             )
           ) : section === "numbers" ? (

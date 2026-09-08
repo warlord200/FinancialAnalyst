@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DOSSIER_STEPS, stepIsDone, stepLockReason } from "./steps";
+import { DOSSIER_STEPS, gateStatusChip, stepIsDone, stepLockReason } from "./steps";
 import type { Dossier } from "./useDossier";
 import { DossierStrip, LockedStepNote } from "./dossierStrip";
 import { OnePagerStepPanel } from "./onePagerStepPanel";
@@ -10,9 +10,8 @@ import { ValuationStepPanel } from "./valuationStepPanel";
 import { ThesisStepPanel } from "./thesisStepPanel";
 
 function statusLabel(gate: { status: string } | null): { text: string; kind: string } {
-  if (gate?.status === "accepted") return { text: "Accepted", kind: "accepted" };
-  if (gate?.status === "rejected") return { text: "Rejected", kind: "rejected" };
-  return { text: "Gate pending", kind: "pending" };
+  const status = gate?.status === "accepted" || gate?.status === "rejected" ? gate.status : null;
+  return gateStatusChip(status);
 }
 
 export function CompanyWorkspace({
@@ -128,7 +127,7 @@ export function CompanyWorkspace({
     <section className="workspace">
       <div className="workspace-toolbar">
         <button type="button" className="link-button" onClick={onBack}>
-          ← All tickers
+          ← Portfolio
         </button>
         <h2 className="workspace-ticker">{ticker}</h2>
         <span className={`status-chip status-${status.kind}`}>{status.text}</span>

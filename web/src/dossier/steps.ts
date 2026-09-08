@@ -22,6 +22,14 @@ export function gateStatus(gate: StepGate | null): GateStatus {
   return gate?.status ?? null;
 }
 
+export function gateStatusChip(
+  status: GateStatus
+): { text: string; kind: string } {
+  if (status === "accepted") return { text: "Accepted", kind: "accepted" };
+  if (status === "rejected") return { text: "Rejected", kind: "rejected" };
+  return { text: "Gate pending", kind: "pending" };
+}
+
 export function doneMapAll(done: Record<string, boolean>): boolean {
   return DONE_STEPS.every((n) => Boolean(done[String(n)]));
 }
