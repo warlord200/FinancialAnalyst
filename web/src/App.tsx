@@ -26,12 +26,14 @@ import type {
 } from "./api";
 import { formatMoney, formatPercent } from "./dossier/format";
 import { useDossier } from "./dossier/useDossier";
+import { useLibrary } from "./dossier/useLibrary";
 import { CompanyWorkspace } from "./dossier/companyWorkspace";
 import { NoCompanyPrompt } from "./dossier/noCompany";
 import { PortfolioView } from "./dossier/portfolioView";
+import { LibraryView } from "./dossier/libraryView";
 
 type Phase = "idle" | "ingesting" | "error";
-type Section = "portfolio" | "dossier" | "numbers" | "eval";
+type Section = "portfolio" | "dossier" | "numbers" | "eval" | "library";
 
 const EVAL_STEP_LABELS: Record<string, string> = {
   "2": "Step 2 · Business & SWOT",
@@ -286,6 +288,8 @@ export default function App() {
   }, []);
 
   const dossier = useDossier(loadQuota);
+  const library = useLibrary();
+  const [workspaceReturn, setWorkspaceReturn] = useState<Section>("portfolio");
 
   useEffect(() => {
     if (!getToken()) return;
@@ -321,6 +325,7 @@ export default function App() {
     setCompany(null);
     setPortfolioRows([]);
     setPortfolioError("");
+    library.reset();
     setSection("portfolio");
   }
 
@@ -341,11 +346,30 @@ export default function App() {
     if (section === "portfolio" && user) refreshPortfolio();
   }, [section, user, refreshPortfolio]);
 
-  function openCompany(symbol: string) {
+  useEffect(() => {
+    if (user) library.load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    if (section === "library" && user) library.load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
+
+  function openDossier(symbol: string, step: number, returnTo: "portfolio" | "library") {
     dossier.reset();
     setCompany(symbol);
-    setActiveStep(1);
+    setActiveStep(step);
+    setWorkspaceReturn(returnTo);
     setSection("dossier");
+  }
+
+  function openCompany(symbol: string) {
+    openDossier(symbol, 1, "portfolio");
+  }
+
+  function openLibraryTicker(ticker: string) {
+    openDossier(ticker, 6, "library");
   }
 
   async function finishIngest(symbol: string) {
@@ -467,6 +491,9 @@ export default function App() {
               >
                 Portfolio
               </button>
+              <button className={activeSection("library")} onClick={() => setSection("library")}>
+                Library
+              </button>
               {company && (
                 <button className={activeSection("dossier")} onClick={() => setSection("dossier")}>
                   Dossier
@@ -529,16 +556,45 @@ export default function App() {
                 onOpenCompany={openCompany}
               />
             </main>
+          ) : section === "library" ? (
+            <main className="content">
+              <p className="meta-text">
+                Tickers whose Step 6 thesis you saved. Open one to view its read-only
+                thesis.
+              </p>
+              {library.actionError && (
+                <div className="error-banner">{library.actionError}</div>
+              )}
+              <LibraryView
+                rows={library.rows}
+                loading={library.loading}
+                error={library.error}
+                onOpen={openLibraryTicker}
+                onUnsave={(ticker) => {
+                  library.unsave(ticker).then(() => refreshPortfolio());
+                }}
+              />
+            </main>
           ) : section === "dossier" ? (
             company ? (
               <CompanyWorkspace
                 ticker={company}
                 activeStep={activeStep}
                 onSelectStep={setActiveStep}
-                onBack={() => setSection("portfolio")}
+                onBack={() => setSection(workspaceReturn)}
+                backLabel={workspaceReturn === "library" ? "Library" : "Portfolio"}
                 onOpenNumbers={() => openNumbers(company)}
                 onQuotaChange={loadQuota}
                 dossier={dossier}
+                saved={library.isSaved(company)}
+                saveBusy={library.saving}
+                saveError={library.actionError}
+                onSaveToLibrary={() => {
+                  library.save(company).then(() => refreshPortfolio());
+                }}
+                onUnsaveFromLibrary={() => {
+                  library.unsave(company).then(() => refreshPortfolio());
+                }}
               />
             ) : (
               <main className="content">

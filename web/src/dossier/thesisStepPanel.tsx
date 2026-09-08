@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { ThesisResponse } from "../api";
 import { NoCompanyPrompt } from "./noCompany";
 import { ThesisPanel } from "./thesis";
+import { SaveToLibrary } from "./saveToLibrary";
 
 export function ThesisStepPanel({
   ticker,
@@ -10,6 +11,11 @@ export function ThesisStepPanel({
   loading,
   error,
   onLoad,
+  saved,
+  saveBusy,
+  saveError,
+  onSaveToLibrary,
+  onUnsaveFromLibrary,
 }: {
   ticker: string | null;
   onOpenIngest: () => void;
@@ -17,6 +23,11 @@ export function ThesisStepPanel({
   loading: boolean;
   error: string;
   onLoad: (symbol: string) => void;
+  saved: boolean;
+  saveBusy: boolean;
+  saveError: string;
+  onSaveToLibrary: () => void;
+  onUnsaveFromLibrary: () => void;
 }) {
   useEffect(() => {
     if (ticker && !response && !loading && !error) onLoad(ticker);
@@ -41,6 +52,15 @@ export function ThesisStepPanel({
       {loading && <div className="status">Drafting thesis…</div>}
       {error && <div className="error-banner">{error}</div>}
       {response && <ThesisPanel response={response} />}
+      {(saved || Boolean(response?.thesis)) && (
+        <SaveToLibrary
+          saved={saved}
+          busy={saveBusy}
+          error={saveError}
+          onSave={onSaveToLibrary}
+          onUnsave={onUnsaveFromLibrary}
+        />
+      )}
     </main>
   );
 }

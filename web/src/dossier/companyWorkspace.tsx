@@ -19,17 +19,29 @@ export function CompanyWorkspace({
   activeStep,
   onSelectStep,
   onBack,
+  backLabel,
   onOpenNumbers,
   onQuotaChange,
   dossier,
+  saved,
+  saveBusy,
+  saveError,
+  onSaveToLibrary,
+  onUnsaveFromLibrary,
 }: {
   ticker: string;
   activeStep: number;
   onSelectStep: (n: number) => void;
   onBack: () => void;
+  backLabel: string;
   onOpenNumbers: () => void;
   onQuotaChange: () => void;
   dossier: Dossier;
+  saved: boolean;
+  saveBusy: boolean;
+  saveError: string;
+  onSaveToLibrary: () => void;
+  onUnsaveFromLibrary: () => void;
 }) {
   const gate = dossier.progress?.gate ?? dossier.onePager?.gate ?? null;
   const done = dossier.progress?.done ?? {};
@@ -119,6 +131,11 @@ export function CompanyWorkspace({
         loading={dossier.thesisLoading}
         error={dossier.thesisError}
         onLoad={dossier.loadThesis}
+        saved={saved}
+        saveBusy={saveBusy}
+        saveError={saveError}
+        onSaveToLibrary={onSaveToLibrary}
+        onUnsaveFromLibrary={onUnsaveFromLibrary}
       />
     );
   }
@@ -127,7 +144,7 @@ export function CompanyWorkspace({
     <section className="workspace">
       <div className="workspace-toolbar">
         <button type="button" className="link-button" onClick={onBack}>
-          ← Portfolio
+          ← {backLabel}
         </button>
         <h2 className="workspace-ticker">{ticker}</h2>
         <span className={`status-chip status-${status.kind}`}>{status.text}</span>

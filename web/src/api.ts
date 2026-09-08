@@ -34,6 +34,17 @@ export interface PortfolioRow {
   saved: boolean;
 }
 
+export interface LibraryRow {
+  ticker: string;
+  saved_at: string;
+}
+
+export interface LibrarySaveResponse {
+  ticker: string;
+  saved: boolean;
+  saved_at?: string | null;
+}
+
 export interface Financials {
   fiscal_years: number[];
   income_statement: Record<string, Record<string, number>>;
@@ -529,6 +540,22 @@ export function getIngestJob(jobId: string) {
 
 export function getPortfolio() {
   return request<PortfolioRow[]>("/api/portfolio");
+}
+
+export function getLibrary() {
+  return request<LibraryRow[]>("/api/library");
+}
+
+export function saveToLibrary(ticker: string) {
+  return request<LibrarySaveResponse>(`/api/library/${ticker}`, {
+    method: "POST",
+  });
+}
+
+export function unsaveFromLibrary(ticker: string) {
+  return request<LibrarySaveResponse>(`/api/library/${ticker}`, {
+    method: "DELETE",
+  });
 }
 
 export function getEvalSummary() {
