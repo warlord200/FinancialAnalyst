@@ -26,27 +26,23 @@ export function OnePagerStepPanel({
 
   if (!ticker) {
     return (
-      <div className="layout">
-        <main className="content">
-          <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-        </main>
-      </div>
+      <main className="content">
+        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
+      </main>
     );
   }
 
   return (
-    <div className="layout">
-      <main className="content">
-        <div className="search">
-          <span className="meta-text">Step 1 · one-pager · {ticker}</span>
-          <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-            Analyze
-          </button>
-        </div>
-        {loading && <div className="status">Loading one-pager…</div>}
-        {error && <div className="error-banner">{error}</div>}
-        {response && <OnePagerCard response={response} onGate={onGate} />}
-      </main>
-    </div>
+    <main className="content">
+      <div className="search">
+        <span className="meta-text">Step 1 · one-pager · {ticker}</span>
+        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
+          Analyze
+        </button>
+      </div>
+      {loading && <div className="status">Loading one-pager…</div>}
+      {error && <div className="error-banner">{error}</div>}
+      {response && <OnePagerCard response={response} onGate={onGate} />}
+    </main>
   );
 }

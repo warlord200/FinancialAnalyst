@@ -10,7 +10,6 @@ export function ValuationStepPanel({
   loading,
   error,
   onLoad,
-  onToggleDone,
   valDiscountPct,
   valGrowthPct,
   onDiscountChange,
@@ -22,7 +21,6 @@ export function ValuationStepPanel({
   loading: boolean;
   error: string;
   onLoad: (symbol: string) => void;
-  onToggleDone: (symbol: string, step: number, done: boolean) => void;
   valDiscountPct: string;
   valGrowthPct: string;
   onDiscountChange: (value: string) => void;
@@ -34,37 +32,32 @@ export function ValuationStepPanel({
 
   if (!ticker) {
     return (
-      <div className="layout">
-        <main className="content">
-          <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-        </main>
-      </div>
+      <main className="content">
+        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
+      </main>
     );
   }
 
   return (
-    <div className="layout">
-      <main className="content">
-        <div className="search">
-          <span className="meta-text">Step 5 · Valuation · {ticker}</span>
-          <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-            Analyze
-          </button>
-        </div>
-        {loading && <div className="status">Loading valuation…</div>}
-        {error && <div className="error-banner">{error}</div>}
-        {response && (
-          <ValuationPanel
-            response={response}
-            discountPct={valDiscountPct}
-            growthPct={valGrowthPct}
-            onDiscountChange={onDiscountChange}
-            onGrowthChange={onGrowthChange}
-            onToggleDone={(step, done) => onToggleDone(ticker, step, done)}
-            onApplyAssumptions={() => onLoad(ticker)}
-          />
-        )}
-      </main>
-    </div>
+    <main className="content">
+      <div className="search">
+        <span className="meta-text">Step 5 · Valuation · {ticker}</span>
+        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
+          Analyze
+        </button>
+      </div>
+      {loading && <div className="status">Loading valuation…</div>}
+      {error && <div className="error-banner">{error}</div>}
+      {response && (
+        <ValuationPanel
+          response={response}
+          discountPct={valDiscountPct}
+          growthPct={valGrowthPct}
+          onDiscountChange={onDiscountChange}
+          onGrowthChange={onGrowthChange}
+          onApplyAssumptions={() => onLoad(ticker)}
+        />
+      )}
+    </main>
   );
 }

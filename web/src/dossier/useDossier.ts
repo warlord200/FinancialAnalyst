@@ -5,6 +5,7 @@ import {
   getFinancials,
   getNumbers,
   getOnePager,
+  getStepDone,
   getStrategy,
   getThesis,
   getValuation,
@@ -14,6 +15,7 @@ import {
 } from "../api";
 import type {
   BusinessSwotResponse,
+  DoneMarksResponse,
   FinancialsResponse,
   OnePagerResponse,
   StrategyResponse,
@@ -24,6 +26,9 @@ import type {
 type InflightKey = "onePager" | "business" | "financials" | "strategy" | "valuation" | "thesis";
 
 export interface Dossier {
+  progress: DoneMarksResponse | null;
+  progressError: string;
+  progressLoading: boolean;
   onePager: OnePagerResponse | null;
   onePagerError: string;
   onePagerLoading: boolean;
@@ -46,19 +51,23 @@ export interface Dossier {
   valGrowthPct: string;
   setValDiscountPct: (value: string) => void;
   setValGrowthPct: (value: string) => void;
+  loadProgress: (symbol: string) => Promise<void>;
   loadOnePager: (symbol: string) => Promise<void>;
   setGate: (symbol: string, decision: "accept" | "reject") => Promise<void>;
   loadBusinessSwot: (symbol: string) => Promise<void>;
   loadFinancials: (symbol: string) => Promise<void>;
   loadStrategy: (symbol: string) => Promise<void>;
   loadValuation: (symbol: string) => Promise<void>;
-  toggleStepDone: (symbol: string, step: number, done: boolean) => Promise<void>;
+  toggleDone: (symbol: string, step: number, done: boolean) => Promise<void>;
   loadThesis: (symbol: string) => Promise<void>;
-  toggleThesisDone: (symbol: string, step: number, done: boolean) => Promise<void>;
   reset: () => void;
 }
 
 export function useDossier(onQuotaChange: () => void): Dossier {
+  const [progress, setProgress] = useState<DoneMarksResponse | null>(null);
+  const [progressError, setProgressError] = useState("");
+  const [progressLoading, setProgressLoading] = useState(false);
+
   const [onePager, setOnePager] = useState<OnePagerResponse | null>(null);
   const [onePagerError, setOnePagerError] = useState("");
   const [onePagerLoading, setOnePagerLoading] = useState(false);
@@ -104,6 +113,21 @@ export function useDossier(onQuotaChange: () => void): Dossier {
     }
   }
 
+  async function loadProgress(symbol: string) {
+    const s = symbol.trim().toUpperCase();
+    if (!s) return;
+    setProgressLoading(true);
+    setProgressError("");
+    try {
+      await ensureNumbers(s);
+      setProgress(await getStepDone(s));
+    } catch (e) {
+      setProgressError(e instanceof Error ? e.message : "Failed to load dossier progress");
+    } finally {
+      setProgressLoading(false);
+    }
+  }
+
   async function loadOnePager(symbol: string) {
     const s = symbol.trim().toUpperCase();
     if (!s || inflight.current.onePager === s) return;
@@ -122,14 +146,23 @@ export function useDossier(onQuotaChange: () => void): Dossier {
   }
 
   async function setGate(symbol: string, decision: "accept" | "reject") {
-    if (!onePager) return;
+    if (!onePager && !progress) return;
     setOnePagerError("");
+    setProgressError("");
     try {
       const res = await setStepGate(symbol, decision);
-      setOnePager({ ...onePager, gate: res.gate });
+      setOnePager((prev) => (prev ? { ...prev, gate: res.gate } : prev));
+      setProgress((prev) => (prev ? { ...prev, gate: res.gate } : prev));
     } catch (e) {
       setOnePagerError(e instanceof Error ? e.message : "Failed to save decision");
     }
+  }
+
+  function clearGatedSteps() {
+    setValuation(null);
+    setValuationError("");
+    setThesis(null);
+    setThesisError("");
   }
 
   async function loadBusinessSwot(symbol: string) {
@@ -209,19 +242,16 @@ export function useDossier(onQuotaChange: () => void): Dossier {
     }
   }
 
-  async function toggleStepDone(symbol: string, step: number, done: boolean) {
-    if (!valuation) return;
-    setValuationError("");
+  async function toggleDone(symbol: string, step: number, done: boolean) {
+    setProgressError("");
     try {
-      if (done) {
-        await clearStepDone(symbol, step);
-      } else {
-        await markStepDone(symbol, step);
-      }
-      const { discountRate, growth } = currentAssumptionParams();
-      setValuation(await getValuation(symbol, discountRate, growth));
+      const updated = done
+        ? await clearStepDone(symbol, step)
+        : await markStepDone(symbol, step);
+      setProgress(updated);
+      clearGatedSteps();
     } catch (e) {
-      setValuationError(e instanceof Error ? e.message : "Failed to save done mark");
+      setProgressError(e instanceof Error ? e.message : "Failed to save done mark");
     }
   }
 
@@ -242,21 +272,6 @@ export function useDossier(onQuotaChange: () => void): Dossier {
     }
   }
 
-  async function toggleThesisDone(symbol: string, step: number, done: boolean) {
-    if (!thesis) return;
-    setThesisError("");
-    try {
-      if (done) {
-        await clearStepDone(symbol, step);
-      } else {
-        await markStepDone(symbol, step);
-      }
-      setThesis(await getThesis(symbol));
-    } catch (e) {
-      setThesisError(e instanceof Error ? e.message : "Failed to save done mark");
-    }
-  }
-
   function reset() {
     inflight.current = {
       onePager: null,
@@ -266,6 +281,9 @@ export function useDossier(onQuotaChange: () => void): Dossier {
       valuation: null,
       thesis: null,
     };
+    setProgress(null);
+    setProgressError("");
+    setProgressLoading(false);
     setOnePager(null);
     setOnePagerError("");
     setOnePagerLoading(false);
@@ -287,6 +305,9 @@ export function useDossier(onQuotaChange: () => void): Dossier {
   }
 
   return {
+    progress,
+    progressError,
+    progressLoading,
     onePager,
     onePagerError,
     onePagerLoading,
@@ -307,17 +328,17 @@ export function useDossier(onQuotaChange: () => void): Dossier {
     thesisLoading,
     valDiscountPct,
     valGrowthPct,
-  setValDiscountPct,
-  setValGrowthPct,
-  loadOnePager,
+    setValDiscountPct,
+    setValGrowthPct,
+    loadProgress,
+    loadOnePager,
     setGate,
     loadBusinessSwot,
     loadFinancials,
     loadStrategy,
     loadValuation,
-    toggleStepDone,
+    toggleDone,
     loadThesis,
-    toggleThesisDone,
     reset,
   };
 }

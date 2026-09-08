@@ -338,7 +338,7 @@ def create_app() -> FastAPI:
     def mark_step_done(
         ticker: str,
         user: CurrentUser,
-        step: int = Path(ge=1, le=4),
+        step: int = Path(ge=2, le=4),
     ):
         ticker = ticker.upper()
         result = _get_steps_service().mark_done(user["email"], ticker, step)
@@ -353,7 +353,7 @@ def create_app() -> FastAPI:
     def unmark_step_done(
         ticker: str,
         user: CurrentUser,
-        step: int = Path(ge=1, le=4),
+        step: int = Path(ge=2, le=4),
     ):
         ticker = ticker.upper()
         result = _get_steps_service().unmark_done(user["email"], ticker, step)

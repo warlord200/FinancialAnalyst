@@ -3,6 +3,7 @@ import type { StrategyResponse } from "../api";
 import { NoCompanyPrompt } from "./noCompany";
 import { StrategyCard } from "./cards";
 import { ChatPanel } from "./chat";
+import { DoneMarkToggle } from "./doneMarkToggle";
 
 export function StrategyStepPanel({
   ticker,
@@ -11,6 +12,8 @@ export function StrategyStepPanel({
   loading,
   error,
   onLoad,
+  done,
+  onToggleDone,
 }: {
   ticker: string | null;
   onOpenIngest: () => void;
@@ -18,6 +21,8 @@ export function StrategyStepPanel({
   loading: boolean;
   error: string;
   onLoad: (symbol: string) => void;
+  done: boolean;
+  onToggleDone: (done: boolean) => void;
 }) {
   useEffect(() => {
     if (ticker && !response && !loading && !error) onLoad(ticker);
@@ -25,28 +30,29 @@ export function StrategyStepPanel({
 
   if (!ticker) {
     return (
-      <div className="layout">
-        <main className="content">
-          <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-        </main>
-      </div>
+      <main className="content">
+        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
+      </main>
     );
   }
 
   return (
-    <div className="layout">
-      <main className="content">
-        <div className="search">
-          <span className="meta-text">Step 4 · Strategy · {ticker}</span>
-          <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-            Analyze
-          </button>
-        </div>
-        {loading && <div className="status">Drafting Strategy…</div>}
-        {error && <div className="error-banner">{error}</div>}
-        {response && <StrategyCard response={response} />}
-        {response && <ChatPanel ticker={ticker} step={4} label="Strategy" />}
-      </main>
-    </div>
+    <main className="content">
+      <div className="search">
+        <span className="meta-text">Step 4 · Strategy · {ticker}</span>
+        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
+          Analyze
+        </button>
+      </div>
+      <DoneMarkToggle
+        done={done}
+        opensLabel="open Steps 5-6 (Valuation & Thesis)"
+        onToggle={onToggleDone}
+      />
+      {loading && <div className="status">Drafting Strategy…</div>}
+      {error && <div className="error-banner">{error}</div>}
+      {response && <StrategyCard response={response} />}
+      {response && <ChatPanel ticker={ticker} step={4} label="Strategy" />}
+    </main>
   );
 }

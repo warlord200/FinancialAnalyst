@@ -200,6 +200,7 @@ export interface PeerScorecardResponse {
 
 export interface DoneMarksResponse {
   ticker: string;
+  gate: StepGate | null;
   done: Record<string, boolean>;
 }
 
@@ -479,6 +480,10 @@ export function clearStepDone(ticker: string, step: number) {
   return request<DoneMarksResponse>(`/api/steps/${ticker}/done/${step}`, {
     method: "DELETE",
   });
+}
+
+export function getStepDone(ticker: string) {
+  return request<DoneMarksResponse>(`/api/steps/${ticker}/done`);
 }
 
 export function getValuation(

@@ -3,16 +3,16 @@ content corpus, and the per-user step state, and composes step responses.
 
 Step 1 (the one-pager), step 3 tables, and step 5 (valuation) are pure
 derivations from the numbers layer. Step 5 is hard-gated: it is not
-computed until the user marks steps 1-4 done in the per-user step state,
-so the price cannot bias the earlier analysis. Steps 2-4 are source-tagged
-artifacts produced by the generation framework over the shared corpus;
-they are cached per ticker so a repeat view is instant and stable. Step 6
-(the thesis) is gated like valuation and drafts the same way as steps 2-4:
-a read-only, source-tagged thesis document the user reviews but does not
-edit.
+computed until the Step 1 gate is accepted and the user marks steps 2-4
+done in the per-user step state, so the price cannot bias the earlier
+analysis. Steps 2-4 are source-tagged artifacts produced by the generation
+framework over the shared corpus; they are cached per ticker so a repeat
+view is instant and stable. Step 6 (the thesis) is gated like valuation
+and drafts the same way as steps 2-4: a read-only, source-tagged thesis
+document the user reviews but does not edit.
 """
 
-from financial_analyst.steps import STEP_ONE, VALUATION_GATE_STEPS
+from financial_analyst.steps import DONE_STEPS, STEP_ONE
 from financial_analyst.steps.business_swot import ARTIFACT_TYPE, build_business_swot
 from financial_analyst.steps.financials import ARTIFACT_TYPE as FINANCIALS_TYPE
 from financial_analyst.steps.financials import build_financials
@@ -201,30 +201,52 @@ class StepsService:
 
     def _done_map(self, email: str, ticker: str) -> dict[str, bool]:
         done_steps = self.state.get_done_steps(email, ticker) if self.state else []
-        return {str(step): step in done_steps for step in VALUATION_GATE_STEPS}
+        return {str(step): step in done_steps for step in DONE_STEPS}
+
+    def _gate_accepted(self, email: str, ticker: str) -> bool:
+        gate = self.state.get_gate(email, ticker, STEP_ONE) if self.state else None
+        return gate is not None and gate["status"] == "accepted"
+
+    def _gated_missing(self, email: str, ticker: str) -> list[int]:
+        """The prerequisites that keep valuation/thesis locked.
+
+        Step 5-6 unlock exactly when the Step 1 gate is accepted and every
+        step in ``DONE_STEPS`` is marked done. Missing prerequisites are
+        reported ascending: step 1 first when the gate is not accepted,
+        then the steps 2-4 that are not yet marked done.
+        """
+        done_map = self._done_map(email, ticker)
+        missing: list[int] = []
+        if not self._gate_accepted(email, ticker):
+            missing.append(STEP_ONE)
+        missing.extend(step for step in DONE_STEPS if not done_map[str(step)])
+        return missing
 
     def done_status(self, email: str, ticker: str) -> dict | None:
-        """The user's done-marks for the steps that gate valuation.
+        """The company's dossier progress: gate state and done-marks.
 
         Returns None when the ticker has no numbers, so the caller can 404.
+        This is the read the workspace uses to render the step strip: the
+        gate is the Step 1 decision and the done-marks cover steps 2-4.
         """
         ticker = ticker.upper()
         if self.numbers.get(ticker) is None:
             return None
-        return {"ticker": ticker, "done": self._done_map(email, ticker)}
+        gate = self.state.get_gate(email, ticker, STEP_ONE) if self.state else None
+        return {"ticker": ticker, "gate": gate, "done": self._done_map(email, ticker)}
 
     def mark_done(self, email: str, ticker: str, step: int) -> dict | None:
         """Record that the user has reviewed and finished a step.
 
-        Marking a step done is the user's own signal that they are ready to
-        move on; the accept/reject gate on step 1 is separate and does not
-        count. Returns None when the ticker has no numbers.
+        Done-marks live on steps 2-4 only; the accept/reject gate on step 1
+        is separate and does not count. Returns None when the ticker has no
+        numbers.
         """
         ticker = ticker.upper()
         if self.numbers.get(ticker) is None:
             return None
         self.state.set_done(email, ticker, step)
-        return {"ticker": ticker, "done": self._done_map(email, ticker)}
+        return self.done_status(email, ticker)
 
     def unmark_done(self, email: str, ticker: str, step: int) -> dict | None:
         """Reopen a step the user had marked done."""
@@ -232,7 +254,7 @@ class StepsService:
         if self.numbers.get(ticker) is None:
             return None
         self.state.clear_done(email, ticker, step)
-        return {"ticker": ticker, "done": self._done_map(email, ticker)}
+        return self.done_status(email, ticker)
 
     def valuation(
         self,
@@ -241,21 +263,23 @@ class StepsService:
         discount_rate: float | None = None,
         growth: float | None = None,
     ) -> dict | None:
-        """The Step 5 valuation, locked until the user marks steps 1-4 done.
+        """The Step 5 valuation, locked until the gate is accepted and the
+        user marks steps 2-4 done.
 
-        Returns a locked payload with ``missing_steps`` until every gating
-        step is marked done, so the caller never sees a price-based analysis
-        before they have reviewed steps 1-4. When unlocked the valuation is
-        computed on demand from the shared numbers layer and the user's
-        price (including any manual override); peers from the user's peer
-        list are pulled in at their own current prices (fetched lazily).
-        Returns None when the ticker has no numbers.
+        Returns a locked payload with ``missing_steps`` until the gate is
+        accepted and every gating step is marked done, so the caller never
+        sees a price-based analysis before they have reviewed steps 1-4.
+        When unlocked the valuation is computed on demand from the shared
+        numbers layer and the user's price (including any manual override);
+        peers from the user's peer list are pulled in at their own current
+        prices (fetched lazily). Returns None when the ticker has no
+        numbers.
         """
         ticker = ticker.upper()
         if self.numbers.get(ticker) is None:
             return None
         done_map = self._done_map(email, ticker)
-        missing = [step for step in VALUATION_GATE_STEPS if not done_map[str(step)]]
+        missing = self._gated_missing(email, ticker)
         payload = {
             "ticker": ticker,
             "locked": bool(missing),
@@ -356,23 +380,24 @@ class StepsService:
         return {"sections": sections}
 
     def thesis(self, email: str, ticker: str) -> dict | None:
-        """The Step 6 thesis, locked until the user marks steps 1-4 done.
+        """The Step 6 thesis, locked until the gate is accepted and the user
+        marks steps 2-4 done.
 
-        Returns a locked payload with ``missing_steps`` until every gating
-        step is marked done, mirroring valuation: the thesis is the final
-        synthesis, so it is only composed after the user has reviewed the
-        dossier. When unlocked the response carries the grounded draft and
-        the read-only thesis document seeded from it. The thesis is not
-        editable: repeat views return the same cached draft, and re-analysis
-        rebuilds the shared draft. Returns None when the ticker has no
-        numbers, or when it is unlocked but there is no corpus to draft
-        over.
+        Returns a locked payload with ``missing_steps`` until the gate is
+        accepted and every gating step is marked done, mirroring valuation:
+        the thesis is the final synthesis, so it is only composed after the
+        user has reviewed the dossier. When unlocked the response carries
+        the grounded draft and the read-only thesis document seeded from it.
+        The thesis is not editable: repeat views return the same cached
+        draft, and re-analysis rebuilds the shared draft. Returns None when
+        the ticker has no numbers, or when it is unlocked but there is no
+        corpus to draft over.
         """
         ticker = ticker.upper()
         if self.numbers.get(ticker) is None:
             return None
         done_map = self._done_map(email, ticker)
-        missing = [step for step in VALUATION_GATE_STEPS if not done_map[str(step)]]
+        missing = self._gated_missing(email, ticker)
         if missing:
             return {
                 "ticker": ticker,

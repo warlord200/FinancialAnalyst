@@ -1,14 +1,7 @@
 import type { ThesisResponse } from "../api";
 import { sourceTagLabel } from "./artifacts";
-import { VALUATION_STEP_LABELS } from "./valuation";
 
-export function ThesisPanel({
-  response,
-  onToggleDone,
-}: {
-  response: ThesisResponse;
-  onToggleDone: (step: number, done: boolean) => void;
-}) {
+export function ThesisPanel({ response }: { response: ThesisResponse }) {
   const thesis = response.thesis ?? null;
 
   const draftByKey = new Map(
@@ -19,33 +12,16 @@ export function ThesisPanel({
     <section>
       <div className="report-meta">
         <span className="meta-text">
-          Step 6 · Thesis · {response.ticker} · locked until you mark steps
-          1-4 done, so the thesis follows the whole dossier.
+          Step 6 · Thesis · {response.ticker} · opens once the one-pager is
+          accepted and Steps 2-4 are marked done, so the thesis follows the
+          whole dossier.
         </span>
-      </div>
-
-      <div className="peer-list">
-        {Object.entries(VALUATION_STEP_LABELS).map(([step, label]) => {
-          const done = response.done[step] ?? false;
-          return (
-            <span key={step} className="peer-chip">
-              {label}
-              <button
-                onClick={() => onToggleDone(Number(step), done)}
-                className="link-button"
-                aria-label={`${done ? "Unmark" : "Mark"} ${label} done`}
-              >
-                {done ? "Done — undo" : "mark done"}
-              </button>
-            </span>
-          );
-        })}
       </div>
 
       {!thesis ? (
         <div className="status">
-          Thesis locked. Finish reviewing the steps above to draft your
-          thesis.
+          Thesis locked. Accept the one-pager (Step 1) and mark Steps 2-4
+          done to draft your thesis.
         </div>
       ) : (
         <div className="thesis-editor">

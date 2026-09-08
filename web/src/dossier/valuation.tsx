@@ -1,13 +1,6 @@
 import type { ValuationResponse } from "../api";
 import { formatMoney, formatPercent } from "./format";
 
-export const VALUATION_STEP_LABELS: Record<number, string> = {
-  1: "Step 1 · One-pager",
-  2: "Step 2 · Business & SWOT",
-  3: "Step 3 · Financials",
-  4: "Step 4 · Strategy",
-};
-
 function fmtMoney(value: number | null | undefined) {
   return value === null || value === undefined ? "—" : formatMoney(value);
 }
@@ -26,7 +19,6 @@ export function ValuationPanel({
   growthPct,
   onDiscountChange,
   onGrowthChange,
-  onToggleDone,
   onApplyAssumptions,
 }: {
   response: ValuationResponse;
@@ -34,7 +26,6 @@ export function ValuationPanel({
   growthPct: string;
   onDiscountChange: (value: string) => void;
   onGrowthChange: (value: string) => void;
-  onToggleDone: (step: number, done: boolean) => void;
   onApplyAssumptions: () => void;
 }) {
   const valuation = response.valuation ?? null;
@@ -44,32 +35,15 @@ export function ValuationPanel({
     <section>
       <div className="report-meta">
         <span className="meta-text">
-          Valuation is locked until you mark steps 1-4 done, so the price
-          cannot bias your earlier analysis.
+          Valuation opens once the one-pager is accepted and Steps 2-4 are
+          marked done, so the price cannot bias your earlier analysis.
         </span>
-      </div>
-
-      <div className="peer-list">
-        {Object.entries(VALUATION_STEP_LABELS).map(([step, label]) => {
-          const done = response.done[step] ?? false;
-          return (
-            <span key={step} className="peer-chip">
-              {label}
-              <button
-                onClick={() => onToggleDone(Number(step), done)}
-                className="link-button"
-                aria-label={`${done ? "Unmark" : "Mark"} ${label} done`}
-              >
-                {done ? "Done — undo" : "mark done"}
-              </button>
-            </span>
-          );
-        })}
       </div>
 
       {!valuation ? (
         <div className="status">
-          Valuation locked. Finish reviewing the steps above to unlock it.
+          Valuation locked. Accept the one-pager (Step 1) and mark Steps 2-4
+          done to unlock it.
         </div>
       ) : (
         <>

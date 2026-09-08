@@ -6,10 +6,11 @@ client, per-user done-marks live in a temp-dir SQLite store, and the
 thesis draft is produced by a real ArtifactGenerator over a fake corpus
 with a fake LLM, so grounding is exercised end to end.
 
-The thesis is hard-gated like valuation: it stays locked until the user
-marks steps 1-4 done. Once unlocked, the grounded draft *is* the thesis:
-the read-only document mirrors the draft's content under the canonical
-headings, so there is no per-user save endpoint and no edit path.
+The thesis is hard-gated like valuation: it stays locked until the Step 1
+gate is accepted and the user marks steps 2-4 done. Once unlocked, the
+grounded draft *is* the thesis: the read-only document mirrors the draft's
+content under the canonical headings, so there is no per-user save endpoint
+and no edit path.
 """
 
 import pytest
@@ -67,8 +68,13 @@ def make_thesis_client(
     return client, steps, llm
 
 
+def accept_gate(client):
+    assert client.post("/api/steps/TSLA/gate", json={"decision": "accept"}).status_code == 200
+
+
 def mark_all_done(client):
-    for step in (1, 2, 3, 4):
+    accept_gate(client)
+    for step in (2, 3, 4):
         assert client.post(f"/api/steps/TSLA/done/{step}").status_code == 200
 
 
@@ -89,11 +95,19 @@ class TestThesisGate:
 
     def test_thesis_partially_unlocks_as_steps_done(self, tmp_path, monkeypatch):
         client, _, _ = make_thesis_client(tmp_path, monkeypatch)
-        for step in (1, 2, 3):
+        accept_gate(client)
+        for step in (2, 3):
             client.post(f"/api/steps/TSLA/done/{step}")
         body = client.get("/api/steps/TSLA/thesis").json()
         assert body["locked"] is True
         assert body["missing_steps"] == [4]
+
+    def test_accepting_the_gate_alone_does_not_unlock(self, tmp_path, monkeypatch):
+        client, _, _ = make_thesis_client(tmp_path, monkeypatch)
+        accept_gate(client)
+        body = client.get("/api/steps/TSLA/thesis").json()
+        assert body["locked"] is True
+        assert body["missing_steps"] == [2, 3, 4]
 
     def test_unmarking_a_step_relocks_thesis(self, tmp_path, monkeypatch):
         client, _, _ = make_thesis_client(tmp_path, monkeypatch)

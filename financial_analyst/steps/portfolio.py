@@ -11,9 +11,7 @@ Portfolio reads load the user's whole state in a handful of queries, never
 one per ingested ticker.
 """
 
-from financial_analyst.steps import STEP_ONE
-
-DONE_STEPS = (2, 3, 4)
+from financial_analyst.steps import DONE_STEPS, STEP_ONE
 
 
 class PortfolioService:

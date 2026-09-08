@@ -28,24 +28,11 @@ import type {
 } from "./api";
 import { formatMoney, formatPercent } from "./dossier/format";
 import { useDossier } from "./dossier/useDossier";
-import { OnePagerStepPanel } from "./dossier/onePagerStepPanel";
-import { BusinessSwotStepPanel } from "./dossier/businessSwotStepPanel";
-import { FinancialsStepPanel } from "./dossier/financialsStepPanel";
-import { StrategyStepPanel } from "./dossier/strategyStepPanel";
-import { ValuationStepPanel } from "./dossier/valuationStepPanel";
-import { ThesisStepPanel } from "./dossier/thesisStepPanel";
+import { CompanyWorkspace } from "./dossier/companyWorkspace";
+import { NoCompanyPrompt } from "./dossier/noCompany";
 
 type Phase = "idle" | "ingesting" | "done" | "error";
-type View = "ingest" | "step1" | "step2" | "step3" | "step4" | "step5" | "step6" | "numbers" | "eval";
-
-const DOSSIER_STEPS = [
-  { n: 1, label: "One-pager", view: "step1" as View },
-  { n: 2, label: "Business & SWOT", view: "step2" as View },
-  { n: 3, label: "Financials", view: "step3" as View },
-  { n: 4, label: "Strategy", view: "step4" as View },
-  { n: 5, label: "Valuation", view: "step5" as View },
-  { n: 6, label: "Thesis", view: "step6" as View },
-];
+type Section = "ingest" | "dossier" | "numbers" | "eval";
 
 const EVAL_STEP_LABELS: Record<string, string> = {
   "2": "Step 2 · Business & SWOT",
@@ -293,15 +280,15 @@ function AuthPanel({
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("ingest");
-  const [ticker, setTicker] = useState("");
+  const [section, setSection] = useState<Section>("ingest");
+  const [company, setCompany] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = useState(1);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [tickerInput, setTickerInput] = useState("");
   const [job, setJob] = useState<IngestJob | null>(null);
   const [stats, setStats] = useState<IngestStats | null>(null);
   const [error, setError] = useState("");
   const [history, setHistory] = useState<IngestedTicker[]>([]);
-
-  const [company, setCompany] = useState<string | null>(null);
 
   const [numbers, setNumbers] = useState<NumbersResponse | null>(null);
   const [numbersTicker, setNumbersTicker] = useState("");
@@ -332,6 +319,13 @@ export default function App() {
       })
       .catch(() => setToken(null));
   }, [loadQuota]);
+
+  useEffect(() => {
+    if (section === "dossier" && company) {
+      dossier.loadProgress(company);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, company]);
 
   async function handleAuthenticated(u: AuthUser) {
     setUser(u);
@@ -366,14 +360,19 @@ export default function App() {
   }
 
   function openCompany(symbol: string) {
-    if (company === symbol) return;
     dossier.reset();
     setCompany(symbol);
+    setActiveStep(1);
+    setSection("dossier");
   }
 
   async function handleOpenTicker(symbol: string) {
     openCompany(symbol);
-    await openStats(symbol);
+    try {
+      await openStats(symbol);
+    } catch {
+      // stats are optional; the dossier is the destination
+    }
   }
 
   async function run(symbol: string) {
@@ -441,6 +440,12 @@ export default function App() {
     }
   }
 
+  function openNumbers(preferredTicker?: string) {
+    const s = (preferredTicker ?? company ?? "").trim().toUpperCase();
+    if (s) void loadNumbers(s);
+    setSection("numbers");
+  }
+
   const byItemRows = stats ? Object.entries(stats.chunks_by_item).sort() : [];
   const byYearRows = stats ? Object.entries(stats.chunks_by_year).sort() : [];
 
@@ -458,19 +463,7 @@ export default function App() {
     }
   }
 
-  function handleGate(decision: "accept" | "reject") {
-    if (company) void dossier.setGate(company, decision);
-  }
-
-  function handleToggleStepDone(symbol: string, step: number, done: boolean) {
-    void dossier.toggleStepDone(symbol, step, done);
-  }
-
-  function handleToggleThesisDone(symbol: string, step: number, done: boolean) {
-    void dossier.toggleThesisDone(symbol, step, done);
-  }
-
-  const goToIngest = () => setView("ingest");
+  const activeSection = (s: Section) => (section === s ? "tab active" : "tab");
 
   return (
     <div className="app">
@@ -496,25 +489,21 @@ export default function App() {
               </button>
             </div>
             <nav className="tabs">
-              <button className={view === "ingest" ? "tab active" : "tab"} onClick={() => setView("ingest")}>
+              <button className={activeSection("ingest")} onClick={() => setSection("ingest")}>
                 Ingest
               </button>
-              {DOSSIER_STEPS.map((step) => (
-                <button
-                  key={step.n}
-                  className={view === step.view ? "tab active" : "tab"}
-                  onClick={() => setView(step.view)}
-                >
-                  Step {step.n}
+              {company && (
+                <button className={activeSection("dossier")} onClick={() => setSection("dossier")}>
+                  Dossier
                 </button>
-              ))}
-              <button className={view === "numbers" ? "tab active" : "tab"} onClick={() => setView("numbers")}>
-                Financials
+              )}
+              <button className={activeSection("numbers")} onClick={() => openNumbers()}>
+                Numbers
               </button>
               <button
-                className={view === "eval" ? "tab active" : "tab"}
+                className={activeSection("eval")}
                 onClick={() => {
-                  setView("eval");
+                  setSection("eval");
                   loadEval();
                 }}
               >
@@ -523,17 +512,21 @@ export default function App() {
             </nav>
           </header>
 
-          {view === "ingest" ? (
+          {section === "ingest" ? (
             <>
               <div className="search">
                 <input
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && run(ticker)}
+                  value={tickerInput}
+                  onChange={(e) => setTickerInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && run(tickerInput)}
                   placeholder="e.g. TSLA"
                   className="ticker-input"
                 />
-                <button onClick={() => run(ticker)} disabled={phase === "ingesting"} className="primary">
+                <button
+                  onClick={() => run(tickerInput)}
+                  disabled={phase === "ingesting"}
+                  className="primary"
+                >
                   Ingest
                 </button>
               </div>
@@ -543,8 +536,12 @@ export default function App() {
                   <span className="spinner" aria-hidden="true" />
                   {job
                     ? `Ingesting ${job.ticker} — ${job.status} (${job.progress}%)`
-                    : `Ingesting ${ticker.toUpperCase()} — starting job…`}
-                  <progress value={job?.progress ?? 0} max={100} style={{ display: "block", width: "100%", marginTop: 8 }} />
+                    : `Ingesting ${tickerInput.toUpperCase()} — starting job…`}
+                  <progress
+                    value={job?.progress ?? 0}
+                    max={100}
+                    style={{ display: "block", width: "100%", marginTop: 8 }}
+                  />
                 </div>
               )}
 
@@ -556,8 +553,8 @@ export default function App() {
                     <article>
                       <div className="report-meta">
                         <span className="meta-text">
-                          {stats.ticker} · ingested {stats.ingested_at.slice(0, 10)} · {stats.num_chunks} chunks ·
-                          fiscal years {stats.fiscal_years.join(", ")}
+                          {stats.ticker} · ingested {stats.ingested_at.slice(0, 10)} ·{" "}
+                          {stats.num_chunks} chunks · fiscal years {stats.fiscal_years.join(", ")}
                         </span>
                       </div>
                       <ChunkTable title="Chunks by Item" rows={byItemRows} />
@@ -582,45 +579,23 @@ export default function App() {
                 </aside>
               </div>
             </>
-          ) : view === "step1" ? (
-            <OnePagerStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.onePager}
-              loading={dossier.onePagerLoading}
-              error={dossier.onePagerError}
-              onLoad={dossier.loadOnePager}
-              onGate={handleGate}
-            />
-          ) : view === "step2" ? (
-            <BusinessSwotStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.business}
-              loading={dossier.businessLoading}
-              error={dossier.businessError}
-              onLoad={dossier.loadBusinessSwot}
-            />
-          ) : view === "step3" ? (
-            <FinancialsStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.financials}
-              loading={dossier.financialsLoading}
-              error={dossier.financialsError}
-              onLoad={dossier.loadFinancials}
-              onQuotaChange={loadQuota}
-            />
-          ) : view === "step4" ? (
-            <StrategyStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.strategy}
-              loading={dossier.strategyLoading}
-              error={dossier.strategyError}
-              onLoad={dossier.loadStrategy}
-            />
-          ) : view === "numbers" ? (
+          ) : section === "dossier" ? (
+            company ? (
+              <CompanyWorkspace
+                ticker={company}
+                activeStep={activeStep}
+                onSelectStep={setActiveStep}
+                onBack={() => setSection("ingest")}
+                onOpenNumbers={() => openNumbers(company)}
+                onQuotaChange={loadQuota}
+                dossier={dossier}
+              />
+            ) : (
+              <main className="content">
+                <NoCompanyPrompt onOpenIngest={() => setSection("ingest")} />
+              </main>
+            )
+          ) : section === "numbers" ? (
             <div className="layout">
               <main className="content">
                 <div className="search">
@@ -631,10 +606,18 @@ export default function App() {
                     placeholder="e.g. TSLA"
                     className="ticker-input"
                   />
-                  <button onClick={() => loadNumbers(numbersTicker, false)} disabled={numbersLoading} className="primary">
+                  <button
+                    onClick={() => loadNumbers(numbersTicker, false)}
+                    disabled={numbersLoading}
+                    className="primary"
+                  >
                     Load
                   </button>
-                  <button onClick={() => loadNumbers(numbersTicker, true)} disabled={numbersLoading} className="primary">
+                  <button
+                    onClick={() => loadNumbers(numbersTicker, true)}
+                    disabled={numbersLoading}
+                    className="primary"
+                  >
                     Refresh
                   </button>
                 </div>
@@ -644,8 +627,8 @@ export default function App() {
                   <article>
                     <div className="report-meta">
                       <span className="meta-text">
-                        {numbers.ticker} · refreshed {numbers.refreshed_at.slice(0, 10)} · fiscal years{" "}
-                        {numbers.financials.fiscal_years.join(", ")}
+                        {numbers.ticker} · refreshed {numbers.refreshed_at.slice(0, 10)} · fiscal
+                        years {numbers.financials.fiscal_years.join(", ")}
                       </span>
                     </div>
                     <PriceCard ticker={numbers.ticker} numbers={numbers} onSaved={setNumbers} />
@@ -676,11 +659,7 @@ export default function App() {
                       years={numbers.financials.fiscal_years.map(String)}
                       format={formatPercent}
                     />
-                    <MatrixTable
-                      title="Ratios"
-                      matrix={numbers.financials.ratios}
-                      format={formatPercent}
-                    />
+                    <MatrixTable title="Ratios" matrix={numbers.financials.ratios} format={formatPercent} />
                     <MatrixTable
                       title="CAGR (revenue & profit)"
                       matrix={numbers.financials.cagr}
@@ -692,21 +671,7 @@ export default function App() {
                 )}
               </main>
             </div>
-          ) : view === "step5" ? (
-            <ValuationStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.valuation}
-              loading={dossier.valuationLoading}
-              error={dossier.valuationError}
-              onLoad={dossier.loadValuation}
-              onToggleDone={handleToggleStepDone}
-              valDiscountPct={dossier.valDiscountPct}
-              valGrowthPct={dossier.valGrowthPct}
-              onDiscountChange={dossier.setValDiscountPct}
-              onGrowthChange={dossier.setValGrowthPct}
-            />
-          ) : view === "eval" ? (
+          ) : (
             <div className="layout">
               <main className="content">
                 <div className="report-meta">
@@ -727,21 +692,12 @@ export default function App() {
                 {!evalLoading && !evalError && evalSummary && <EvalPanel summary={evalSummary} />}
                 {!evalLoading && !evalError && !evalSummary && (
                   <div className="status">
-                    No eval results yet — run the eval CLI (python -m financial_analyst.evaluation.cli).
+                    No eval results yet — run the eval CLI (python -m
+                    financial_analyst.evaluation.cli).
                   </div>
                 )}
               </main>
             </div>
-          ) : (
-            <ThesisStepPanel
-              ticker={company}
-              onOpenIngest={goToIngest}
-              response={dossier.thesis}
-              loading={dossier.thesisLoading}
-              error={dossier.thesisError}
-              onLoad={dossier.loadThesis}
-              onToggleDone={handleToggleThesisDone}
-            />
           )}
         </>
       )}

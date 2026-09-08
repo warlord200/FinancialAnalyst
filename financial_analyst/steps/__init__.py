@@ -5,12 +5,12 @@ T10 adds the step 3 peer scorecard (per-user peer lists compared against
 the target on growth, margins, debt, and returns, all from the numbers
 layer); T11 adds step 5 (Valuation): a numbers-derived DCF with a
 sensitivity table plus market multiples against the company's own history
-and its peers, hard-gated behind per-user done-marks on steps 1-4; T12
-adds step 6 (Thesis): a read-only, corpus-grounded thesis (what I hold,
-why, key assumptions, what would change my mind) plus a devil's-advocate
-section and open research gaps, drafted over the dossier and shown under
-canonical headings. Step 6 is gated on the same done-marks
-as valuation.
+and its peers, hard-gated behind the Step 1 gate and per-user done-marks
+on steps 2-4; T12 adds step 6 (Thesis): a read-only, corpus-grounded
+thesis (what I hold, why, key assumptions, what would change my mind) plus
+a devil's-advocate section and open research gaps, drafted over the
+dossier and shown under canonical headings. Step 6 is gated on the same
+gate and done-marks as valuation.
 
 ``STEP_SCOPES`` maps each step that drafts over the corpus to the filing
 Items it draws on: step 2 reads Item 1/1A, step 3 reads Item 7/8, step 4
@@ -22,11 +22,13 @@ step chat scope.
 
 STEP_ONE = 1
 
-# Steps the user must mark done before valuation (step 5) unlocks. The
-# accept/reject gate on step 1 is deliberately NOT one of these: a done mark
-# means "I reviewed this step", which is the user's own signal that they are
+# Steps 5-6 (valuation and thesis) unlock when the Step 1 gate is accepted
+# AND every step in DONE_STEPS carries a done-mark. DONE_STEPS are the
+# dossier steps whose panel the user reviews and marks done themselves; the
+# accept/reject gate on step 1 is NOT one of them — a done mark means
+# "I reviewed this step", which is the user's own signal that they are
 # ready to see the price-based analysis.
-VALUATION_GATE_STEPS = (1, 2, 3, 4)
+DONE_STEPS = (2, 3, 4)
 
 STEP_SCOPES = {
     2: ("ITEM 1", "ITEM 1A"),

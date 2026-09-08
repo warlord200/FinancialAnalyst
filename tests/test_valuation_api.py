@@ -3,7 +3,11 @@
 The app under test is the real FastAPI app with a faked service boundary:
 numbers come from a NumbersService backed by per-CIK facts and a price
 client returning a fixed $25 price with a five-year history, and per-user
-done-marks and peer lists live in temp-dir SQLite stores.
+gates, done-marks and peer lists live in temp-dir SQLite stores.
+
+Valuation unlocks only when the Step 1 gate is accepted AND steps 2-4 all
+carry done-marks. The done-marks are scoped to steps 2-4 (a Step 1 done
+mark is not a thing; the gate is the step 1 decision).
 
 Worked figures come from ``test_steps_valuation``: TSLA FY2025 EPS 1.5,
 EBITDA 27.5, FCF 28, so at $25 the P/E is 16.67 and the default DCF equity
@@ -92,28 +96,57 @@ class TestDoneStore:
         assert store.get_done_steps("b@example.com", "TSLA") == []
 
 
+def accept_gate(client, ticker="TSLA"):
+    resp = client.post(f"/api/steps/{ticker}/gate", json={"decision": "accept"})
+    assert resp.status_code == 200
+    return resp
+
+
+def mark_done_steps(client, steps=(2, 3, 4), ticker="TSLA"):
+    for step in steps:
+        assert client.post(f"/api/steps/{ticker}/done/{step}").status_code == 200
+
+
 class TestDoneMarkApi:
     def test_done_mark_requires_auth(self, tmp_path, monkeypatch):
         client, _, _ = build_client(tmp_path, monkeypatch)
-        assert client.post("/api/steps/TSLA/done/1").status_code == 401
+        assert client.post("/api/steps/TSLA/done/2").status_code == 401
 
     def test_mark_and_unmark_a_step(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
-        resp = client.post("/api/steps/TSLA/done/1")
+        resp = client.post("/api/steps/TSLA/done/2")
         assert resp.status_code == 200
         assert resp.json()["done"] == {
-            "1": True, "2": False, "3": False, "4": False,
+            "2": True, "3": False, "4": False,
         }
-        resp = client.delete("/api/steps/TSLA/done/1")
-        assert resp.json()["done"]["1"] is False
+        resp = client.delete("/api/steps/TSLA/done/2")
+        assert resp.json()["done"]["2"] is False
+
+    def test_step_one_done_mark_is_not_allowed(self, tmp_path, monkeypatch):
+        """The gate is the step 1 decision; a done-mark is only for 2-4."""
+        client, _, _ = make_services(tmp_path, monkeypatch)
+        assert client.post("/api/steps/TSLA/done/1").status_code == 422
+        assert client.delete("/api/steps/TSLA/done/1").status_code == 422
+
+    def test_done_status_reports_gate_and_done_marks(self, tmp_path, monkeypatch):
+        client, _, _ = make_services(tmp_path, monkeypatch)
+        body = client.get("/api/steps/TSLA/done").json()
+        assert body["gate"] is None
+        assert body["done"] == {"2": False, "3": False, "4": False}
+
+        accept_gate(client)
+        mark_done_steps(client, steps=(2, 4))
+        body = client.get("/api/steps/TSLA/done").json()
+        assert body["gate"]["status"] == "accepted"
+        assert body["done"] == {"2": True, "3": False, "4": True}
 
     def test_done_is_per_user(self, tmp_path, monkeypatch):
         client_a, _, _ = make_services(tmp_path, monkeypatch, email="a@example.com")
-        client_a.post("/api/steps/TSLA/done/1")
+        client_a.post("/api/steps/TSLA/done/2")
         client_b, _, _ = make_services(
             tmp_path, monkeypatch, refresh=False, email="b@example.com"
         )
-        assert client_b.get("/api/steps/TSLA/done").json()["done"]["1"] is False
+        assert client_b.get("/api/steps/TSLA/done").json()["done"]["2"] is False
 
     def test_done_step_out_of_range_returns_422(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
@@ -122,11 +155,11 @@ class TestDoneMarkApi:
 
     def test_done_404_when_numbers_missing(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch, refresh=False)
-        assert client.post("/api/steps/TSLA/done/1").status_code == 404
+        assert client.post("/api/steps/TSLA/done/2").status_code == 404
 
 
 class TestValuationGateApi:
-    def test_valuation_locked_until_all_steps_done(self, tmp_path, monkeypatch):
+    def test_valuation_locked_until_gate_accepted_and_steps_2_4_done(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
         resp = client.get("/api/steps/TSLA/valuation")
         assert resp.status_code == 200
@@ -135,15 +168,40 @@ class TestValuationGateApi:
         assert body["missing_steps"] == [1, 2, 3, 4]
         assert "valuation" not in body
 
-        for step in (1, 2, 3):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client, steps=(2, 3))
         body = client.get("/api/steps/TSLA/valuation").json()
         assert body["missing_steps"] == [4]
 
-    def test_valuation_unlocks_when_all_done_and_computes(self, tmp_path, monkeypatch):
+    def test_accepting_the_gate_alone_does_not_unlock(self, tmp_path, monkeypatch):
+        """Accepting the one-pager opens steps 2-4 but not the valuation."""
         client, _, _ = make_services(tmp_path, monkeypatch)
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        body = client.get("/api/steps/TSLA/valuation").json()
+        assert body["locked"] is True
+        assert body["missing_steps"] == [2, 3, 4]
+
+    def test_rejecting_the_gate_keeps_valuation_locked(self, tmp_path, monkeypatch):
+        client, _, _ = make_services(tmp_path, monkeypatch)
+        client.post("/api/steps/TSLA/gate", json={"decision": "reject"})
+        body = client.get("/api/steps/TSLA/valuation").json()
+        assert body["locked"] is True
+        assert body["missing_steps"] == [1, 2, 3, 4]
+
+    def test_reopening_a_rejected_gate_unlocks_when_steps_done(self, tmp_path, monkeypatch):
+        """Rejection is not a write-off: accepting again later reopens the flow."""
+        client, _, _ = make_services(tmp_path, monkeypatch)
+        client.post("/api/steps/TSLA/gate", json={"decision": "reject"})
+        accept_gate(client)
+        mark_done_steps(client)
+        body = client.get("/api/steps/TSLA/valuation").json()
+        assert body["locked"] is False
+        assert body["missing_steps"] == []
+
+    def test_valuation_unlocks_when_gate_accepted_and_all_done_and_computes(self, tmp_path, monkeypatch):
+        client, _, _ = make_services(tmp_path, monkeypatch)
+        accept_gate(client)
+        mark_done_steps(client)
         resp = client.get("/api/steps/TSLA/valuation")
         assert resp.status_code == 200
         body = resp.json()
@@ -164,27 +222,20 @@ class TestValuationGateApi:
 
     def test_unmarking_a_step_relocks_valuation(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client)
         assert client.get("/api/steps/TSLA/valuation").json()["locked"] is False
         client.delete("/api/steps/TSLA/done/2")
         body = client.get("/api/steps/TSLA/valuation").json()
         assert body["locked"] is True
         assert body["missing_steps"] == [2]
 
-    def test_valuation_accept_reject_gate_does_not_unlock(self, tmp_path, monkeypatch):
-        """A step 1 'accept' is not a done mark: the valuation stays locked."""
-        client, _, _ = make_services(tmp_path, monkeypatch)
-        client.post("/api/steps/TSLA/gate", json={"decision": "accept"})
-        body = client.get("/api/steps/TSLA/valuation").json()
-        assert body["locked"] is True
-
 
 class TestValuationAssumptions:
     def test_discount_rate_and_growth_overrides_flow_into_dcf(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client)
         resp = client.get(
             "/api/steps/TSLA/valuation", params={"discount_rate": 0.12, "growth": 0.05}
         )
@@ -195,8 +246,8 @@ class TestValuationAssumptions:
 
     def test_price_override_recomputes_market_multiples(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client)
         baseline = client.get("/api/steps/TSLA/valuation").json()
         assert baseline["valuation"]["multiples"]["pe"] == pytest.approx(PRICE / 1.5)
 
@@ -212,8 +263,8 @@ class TestValuationPeers:
         client, numbers, _ = make_services(tmp_path, monkeypatch)
         client.put("/api/steps/TSLA/peers", json={"peers": ["F"]})
         assert numbers.price_store.get("F") is None
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client)
         body = client.get("/api/steps/TSLA/valuation").json()
         assert body["locked"] is False
         peers = body["valuation"]["peers"]
@@ -223,7 +274,7 @@ class TestValuationPeers:
 
     def test_valuation_without_peers_has_empty_peer_list(self, tmp_path, monkeypatch):
         client, _, _ = make_services(tmp_path, monkeypatch)
-        for step in (1, 2, 3, 4):
-            client.post(f"/api/steps/TSLA/done/{step}")
+        accept_gate(client)
+        mark_done_steps(client)
         body = client.get("/api/steps/TSLA/valuation").json()
         assert body["valuation"]["peers"] == []
