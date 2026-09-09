@@ -31,6 +31,7 @@ import { CompanyWorkspace } from "./dossier/companyWorkspace";
 import { NoCompanyPrompt } from "./dossier/noCompany";
 import { PortfolioView } from "./dossier/portfolioView";
 import { LibraryView } from "./dossier/libraryView";
+import { HomePage } from "./home/home";
 import {
   BrandMark,
   LogOutIcon,
@@ -39,6 +40,7 @@ import {
 
 type Phase = "idle" | "ingesting" | "error";
 type Section = "portfolio" | "dossier" | "numbers" | "eval" | "library";
+type AuthView = "home" | "login" | "signup";
 
 const EVAL_STEP_LABELS: Record<string, string> = {
   "2": "Step 2 · Business & SWOT",
@@ -197,10 +199,14 @@ function PriceCard({
 
 function AuthPanel({
   onAuthenticated,
+  initialMode = "login",
+  onHome,
 }: {
   onAuthenticated: (user: AuthUser) => void;
+  initialMode?: "login" | "signup";
+  onHome?: () => void;
 }) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -228,11 +234,21 @@ function AuthPanel({
     <div className="auth-shell">
       <div className="auth-card card">
         <div className="auth-inner">
-          <a className="auth-brand" href="/" onClick={(e) => e.preventDefault()}>
+          <a
+            className="auth-brand"
+            href="/"
+            onClick={(e) => {
+              e.preventDefault();
+              onHome?.();
+            }}
+          >
             <span className="brand-mark">
               <BrandMark />
             </span>
-            <span className="brand-name">Financial Analyst</span>
+            <span className="brand-text">
+              <span className="brand-name">ThetaRadar</span>
+              <span className="brand-desc">Financial Analyst</span>
+            </span>
           </a>
           <h1 className="auth-title">{mode === "login" ? "Log in" : "Create an account"}</h1>
           <p className="auth-sub">
@@ -352,6 +368,7 @@ export default function App() {
 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [quota, setQuota] = useState<QuotaStatus | null>(null);
+  const [authView, setAuthView] = useState<AuthView>("home");
 
   const [evalSummary, setEvalSummary] = useState<EvalSummary | null>(null);
   const [evalError, setEvalError] = useState("");
@@ -403,6 +420,7 @@ export default function App() {
     setPortfolioError("");
     library.reset();
     setSection("portfolio");
+    setAuthView("home");
   }
 
   const refreshPortfolio = useCallback(() => {
@@ -540,7 +558,18 @@ export default function App() {
   return (
     <div className="app">
       {!user ? (
-        <AuthPanel onAuthenticated={handleAuthenticated} />
+        authView === "home" ? (
+          <HomePage
+            onGetStarted={() => setAuthView("signup")}
+            onLogIn={() => setAuthView("login")}
+          />
+        ) : (
+          <AuthPanel
+            onAuthenticated={handleAuthenticated}
+            initialMode={authView}
+            onHome={() => setAuthView("home")}
+          />
+        )
       ) : (
         <>
           <header className="topbar">
