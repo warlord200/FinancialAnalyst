@@ -9,37 +9,21 @@ export function ThesisPanel({ response }: { response: ThesisResponse }) {
   );
 
   return (
-    <section>
-      <div className="report-meta">
-        <span className="meta-text">
-          Step 6 · Thesis · {response.ticker} · opens once the one-pager is
-          accepted and Steps 2-4 are marked done, so the thesis follows the
-          whole dossier.
-        </span>
-      </div>
-
-      {!thesis ? (
-        <div className="status">
-          Thesis locked. Accept the one-pager (Step 1) and mark Steps 2-4
-          done to draft your thesis.
-        </div>
-      ) : (
+    <div className="report-view">
+      {thesis ? (
         <div className="thesis-editor">
           {thesis.sections.map((section) => {
             const draft = draftByKey.get(section.key);
             return (
-              <section key={section.key} className="matrix-block">
+              <section key={section.key} className="artifact-section">
                 <h2>{section.heading}</h2>
                 <div className="artifact-content">{section.content}</div>
                 {draft && draft.sources.length > 0 && (
                   <>
                     <div className="source-tags">
-                      <span className="meta-text">Draft grounding · </span>
+                      <span className="tags-label">Draft grounding</span>
                       {draft.sources.map((tag, i) => (
-                        <span
-                          key={i}
-                          className={`source-tag source-${tag.type}`}
-                        >
+                        <span key={i} className={`source-tag source-${tag.type}`}>
                           {sourceTagLabel(tag)}
                         </span>
                       ))}
@@ -60,7 +44,12 @@ export function ThesisPanel({ response }: { response: ThesisResponse }) {
             );
           })}
         </div>
+      ) : (
+        <div className="status">
+          Thesis locked. Accept the one-pager (Step 1) and mark Steps 2-4 done
+          to draft your thesis.
+        </div>
       )}
-    </section>
+    </div>
   );
 }

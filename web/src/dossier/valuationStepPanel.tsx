@@ -31,22 +31,35 @@ export function ValuationStepPanel({
   }, [ticker, response, loading, error, onLoad]);
 
   if (!ticker) {
-    return (
-      <main className="content">
-        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-      </main>
-    );
+    return <NoCompanyPrompt onOpenIngest={onOpenIngest} />;
   }
 
   return (
-    <main className="content">
-      <div className="search">
-        <span className="meta-text">Step 5 · Valuation · {ticker}</span>
-        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-          Analyze
-        </button>
-      </div>
-      {loading && <div className="status">Loading valuation…</div>}
+    <div className="step-panel">
+      <header className="step-panel-head">
+        <div className="step-panel-title">
+          <h2>Valuation</h2>
+          <p className="step-scope">
+            Step 5 of 6 · {ticker} · DCF and current multiples, derived from the
+            numbers layer
+          </p>
+        </div>
+        <div className="step-panel-actions">
+          <button
+            onClick={() => onLoad(ticker)}
+            disabled={loading}
+            className="btn btn-secondary btn-sm"
+          >
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+        </div>
+      </header>
+      {loading && (
+        <div className="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>Loading valuation…</span>
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
       {response && (
         <ValuationPanel
@@ -58,6 +71,6 @@ export function ValuationStepPanel({
           onApplyAssumptions={() => onLoad(ticker)}
         />
       )}
-    </main>
+    </div>
   );
 }

@@ -29,30 +29,47 @@ export function StrategyStepPanel({
   }, [ticker, response, loading, error, onLoad]);
 
   if (!ticker) {
-    return (
-      <main className="content">
-        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-      </main>
-    );
+    return <NoCompanyPrompt onOpenIngest={onOpenIngest} />;
   }
 
   return (
-    <main className="content">
-      <div className="search">
-        <span className="meta-text">Step 4 · Strategy · {ticker}</span>
-        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-          Analyze
-        </button>
-      </div>
+    <div className="step-panel">
+      <header className="step-panel-head">
+        <div className="step-panel-title">
+          <h2>Strategy</h2>
+          <p className="step-scope">
+            Step 4 of 6 · {ticker} · grounded in the 10-K Item 5 and Item 7 scope
+          </p>
+        </div>
+        <div className="step-panel-actions">
+          <button
+            onClick={() => onLoad(ticker)}
+            disabled={loading}
+            className="btn btn-secondary btn-sm"
+          >
+            {loading ? "Drafting…" : response ? "Re-draft" : "Draft"}
+          </button>
+        </div>
+      </header>
+      {loading && (
+        <div className="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>Drafting Strategy…</span>
+        </div>
+      )}
+      {error && <div className="error-banner">{error}</div>}
+      {response && <StrategyCard response={response} />}
+      {response && (
+        <>
+          <div className="panel-divider" />
+          <ChatPanel ticker={ticker} step={4} label="Strategy" />
+        </>
+      )}
       <DoneMarkToggle
         done={done}
         opensLabel="open Steps 5-6 (Valuation & Thesis)"
         onToggle={onToggleDone}
       />
-      {loading && <div className="status">Drafting Strategy…</div>}
-      {error && <div className="error-banner">{error}</div>}
-      {response && <StrategyCard response={response} />}
-      {response && <ChatPanel ticker={ticker} step={4} label="Strategy" />}
-    </main>
+    </div>
   );
 }

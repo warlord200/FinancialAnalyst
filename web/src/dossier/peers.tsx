@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { clearPeers, getPeers, setPeers } from "../api";
 import type { FinancialTable } from "../api";
 import { FinancialsTableCard } from "./artifacts";
+import { CloseIcon } from "./icons";
 
 export function PeerScorecardPanel({
   ticker,
@@ -62,21 +63,25 @@ export function PeerScorecardPanel({
 
   return (
     <section className="peer-panel">
-      <div className="peer-header">
-        <span className="meta-text">Peer scorecard · {ticker} vs its peers</span>
-        {loaded && (
-          <span className="meta-text">{peers.length} peers</span>
-        )}
+      <div className="panel-title">
+        <span>Peer scorecard</span>
+        {loaded && <span className="quota-value">{peers.length} peers</span>}
       </div>
+      <p className="step-scope" style={{ marginBottom: 4 }}>
+        {ticker} vs its peers · growth, margins, debt, and returns, latest
+        fiscal year each
+      </p>
       <div className="peer-add-row">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addPeer()}
           placeholder="Add a peer ticker (e.g. F)"
-          className="ticker-input"
+          className="text-input ticker-input"
+          style={{ maxWidth: 210 }}
+          aria-label="Add a peer ticker"
         />
-        <button onClick={addPeer} disabled={busy || !input.trim()} className="primary">
+        <button onClick={addPeer} disabled={busy || !input.trim()} className="btn btn-secondary btn-sm">
           Add peer
         </button>
         {peers.length > 0 && (
@@ -108,10 +113,9 @@ export function PeerScorecardPanel({
               <button
                 onClick={() => save(peers.filter((p) => p !== peer))}
                 disabled={busy}
-                className="link-button"
                 aria-label={`Remove peer ${peer}`}
               >
-                ×
+                <CloseIcon size={11} strokeWidth={2.4} />
               </button>
             </span>
           ))}
@@ -120,9 +124,9 @@ export function PeerScorecardPanel({
       {scorecard.length > 0 ? (
         scorecard.map((table) => <FinancialsTableCard key={table.key} table={table} />)
       ) : (
-        <p className="meta-text">
-          Add peer tickers to compare {ticker}'s growth, margins, debt, and returns
-          against theirs (latest fiscal year each).
+        <p className="peer-empty">
+          Add peer tickers to compare {ticker}'s growth, margins, debt, and
+          returns against theirs.
         </p>
       )}
     </section>

@@ -6,6 +6,7 @@ import {
   stepLockReason,
   type DossierStep,
 } from "./steps";
+import { CheckIcon, LockIcon } from "./icons";
 
 function tabSub(
   step: DossierStep,
@@ -24,7 +25,7 @@ function tabSub(
     return gate?.status === "rejected" ? "rejected" : gate ? "decision made" : "gate decision";
   }
   if (step.n >= 5) return "open";
-  return stepIsDone(step.n, gate, done) ? "done" : "in progress";
+  return stepIsDone(step.n, gate, done) ? "reviewed" : "in progress";
 }
 
 function tabClasses(
@@ -55,37 +56,49 @@ export function DossierStrip({
 }) {
   const accepted = gate?.status === "accepted";
   const allDone = accepted && doneMapAll(done);
-  const badge = (n: number): string => {
-    if (n === 1) return gate?.status === "rejected" ? "Rejected" : accepted ? "Accepted" : "Gate";
-    if (n >= 5 && accepted && allDone) return "Open";
-    if (n >= 2 && n <= 4 && accepted && done[String(n)]) return "Done";
-    return "";
+  const badge = (n: number): { text: string; state: string } | null => {
+    if (n === 1) {
+      if (gate?.status === "rejected")
+        return { text: "Rejected", state: "state-rejected" };
+      if (accepted) return { text: "Accepted", state: "state-done" };
+      return { text: "Gate", state: "state-gate" };
+    }
+    if (n >= 5 && accepted && allDone) return { text: "Open", state: "state-open" };
+    if (n >= 2 && n <= 4 && accepted && done[String(n)])
+      return { text: "Done", state: "state-done" };
+    return null;
   };
   return (
-    <div className="strip" role="tablist" aria-label="Dossier steps">
-      {DOSSIER_STEPS.map((step) => {
-        const locked = Boolean(stepLockReason(step.n, gate, done));
-        const sub = tabSub(step, gate, done);
-        const b = badge(step.n);
-        return (
-          <button
-            key={step.n}
-            type="button"
-            role="tab"
-            aria-selected={activeStep === step.n}
-            title={locked ? `Step ${step.n} is locked. ${tabSub(step, gate, done)}` : undefined}
-            className={tabClasses(step, gate, done, activeStep === step.n)}
-            onClick={() => onSelect(step.n)}
-          >
-            <span className="step-head">
-              <span className="step-num">Step {step.n}</span>
-              {b && <span className="step-badge">{b}</span>}
-            </span>
-            <span className="step-name">{step.name}</span>
-            <span className="step-sub">{sub}</span>
-          </button>
-        );
-      })}
+    <div className="strip-rail">
+      <div className="strip" role="tablist" aria-label="Dossier steps">
+        {DOSSIER_STEPS.map((step) => {
+          const locked = Boolean(stepLockReason(step.n, gate, done));
+          const doneStep = step.n > 1 && stepIsDone(step.n, gate, done);
+          const step1Accepted = step.n === 1 && gate?.status === "accepted";
+          const showCheck = doneStep || step1Accepted;
+          const b = badge(step.n);
+          return (
+            <button
+              key={step.n}
+              type="button"
+              role="tab"
+              aria-selected={activeStep === step.n}
+              title={locked ? `Step ${step.n} is locked. ${tabSub(step, gate, done)}` : undefined}
+              className={tabClasses(step, gate, done, activeStep === step.n)}
+              onClick={() => onSelect(step.n)}
+            >
+              <span className="step-top">
+                <span className="step-orb">
+                  {showCheck ? <CheckIcon /> : locked ? <LockIcon /> : step.n}
+                </span>
+                {b && <span className={`step-badge ${b.state}`}>{b.text}</span>}
+              </span>
+              <span className="step-name">{step.name}</span>
+              <span className="step-sub">{tabSub(step, gate, done)}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -99,10 +112,13 @@ export function LockedStepNote({
 }) {
   return (
     <div className="lock-note" role="status">
-      <strong>
-        Step {step.n} · {step.name} is locked.
-      </strong>{" "}
-      {reason}
+      <LockIcon size={17} />
+      <span>
+        <strong>
+          Step {step.n} · {step.name} is locked.
+        </strong>{" "}
+        {reason}
+      </span>
     </div>
   );
 }

@@ -34,7 +34,7 @@ describe("SaveToLibrary", () => {
         onUnsave={onUnsave}
       />
     );
-    expect(screen.getByText("✓ Saved to library")).toBeDefined();
+    expect(screen.getByText("Saved to library")).toBeDefined();
     expect(screen.queryByRole("button", { name: "Save to library" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Unsave" }));
     expect(onUnsave).toHaveBeenCalledTimes(1);

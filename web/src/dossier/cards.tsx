@@ -10,9 +10,24 @@ import { ArtifactSectionCard, FinancialsTableCard } from "./artifacts";
 export function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric-row">
-      <span className="meta-text">{label}</span>
-      <span>{value}</span>
+      <span>{label}</span>
+      <span className="value">{value}</span>
     </div>
+  );
+}
+
+export function VerdictChip({
+  label,
+  score,
+}: {
+  label: string;
+  score: number;
+}) {
+  return (
+    <span className="verdict-chip">
+      <span className="verdict-score">{score}</span>
+      <span className="verdict-label">{label}</span>
+    </span>
   );
 }
 
@@ -25,17 +40,20 @@ export function OnePagerCard({
 }) {
   const { one_pager: op, gate } = response;
   const pct = (v: number | null) => (v === null ? "n/a" : `${(v * 100).toFixed(1)}%`);
+  const verdict = op.tag.label;
   return (
-    <article>
+    <div className="report-view">
       <div className="report-meta">
-        <span className="meta-text">
-          Step 1 · one-pager · {response.ticker}
-          {op.latest_fiscal_year ? ` · FY${op.latest_fiscal_year}` : ""}
+        <span>
+          One-pager · {response.ticker}
+          {op.latest_fiscal_year ? ` · FY${op.latest_fiscal_year}` : ""} ·{" "}
+          {op.source}
         </span>
-        <span className={`verdict verdict-${op.tag.label}`}>{op.tag.label}</span>
-        <span className="meta-text">score {op.tag.score}/100</span>
       </div>
-      <p className="meta-text">{op.tag.rationale} · {op.source}</p>
+      <div className="verdict-row">
+        <VerdictChip label={verdict} score={op.tag.score} />
+        <span className="verdict-meta">{op.tag.rationale}</span>
+      </div>
       <section className="one-pager-block">
         <h2>Growth</h2>
         <MetricRow
@@ -56,36 +74,52 @@ export function OnePagerCard({
         <MetricRow label="Debt / assets" value={pct(op.debt.debt_to_assets)} />
         <MetricRow label="Debt / equity" value={pct(op.debt.debt_to_equity)} />
       </section>
-      <section className="gate-block">
+
+      <div className="gate-block">
+        <span className="panel-title">The gate</span>
         {gate === null ? (
           <>
-            <p className="meta-text">Accept the deep dive or stop the flow.</p>
+            <p className="gate-copy">
+              Nothing past this step opens until you accept the deep dive. A
+              Reject closes the dossier; you can reopen and accept it later.
+            </p>
             <div className="gate-actions">
-              <button onClick={() => onGate("accept")} className="primary">
+              <button onClick={() => onGate("accept")} className="btn btn-primary">
                 Accept — deep dive
               </button>
-              <button onClick={() => onGate("reject")} className="danger">
+              <button onClick={() => onGate("reject")} className="btn btn-danger">
                 Reject
               </button>
             </div>
           </>
         ) : gate.status === "accepted" ? (
-          <p className="meta-text">
-            Accepted on {gate.updated_at.slice(0, 10)} — deep dive approved.{" "}
+          <div className="gate-verdict">
+            <div className="gate-verdict-line">
+              <span className="status-chip status-accepted">Accepted</span>
+              <span className="verdict-meta">
+                on {gate.updated_at.slice(0, 10)} — deep dive approved.
+              </span>
+            </div>
             <button className="link-button" onClick={() => onGate("reject")}>
               Reject instead
             </button>
-          </p>
+          </div>
         ) : (
-          <p className="meta-text">
-            Rejected on {gate.updated_at.slice(0, 10)} — flow stopped.{" "}
+          <div className="gate-verdict">
+            <div className="gate-verdict-line">
+              <span className="status-chip status-rejected">Rejected</span>
+              <span className="verdict-meta">
+                on {gate.updated_at.slice(0, 10)} — flow stopped. Rejection is
+                not a write-off: you can reopen and accept later.
+              </span>
+            </div>
             <button className="link-button" onClick={() => onGate("accept")}>
               Accept instead
             </button>
-          </p>
+          </div>
         )}
-      </section>
-    </article>
+      </div>
+    </div>
   );
 }
 
@@ -94,41 +128,43 @@ export function BusinessSwotCard({ response }: { response: BusinessSwotResponse 
   const factSections = artifact.sections.filter((s) => !s.key.startsWith("swot_"));
   const swotSections = artifact.sections.filter((s) => s.key.startsWith("swot_"));
   return (
-    <article>
+    <div className="report-view">
       <div className="report-meta">
-        <span className="meta-text">
-          Step 2 · Business & SWOT · {artifact.ticker}
-          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
-          {artifact.scope.items.join(", ")}
+        <span>
+          Business &amp; SWOT · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""}
         </span>
-        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+        <span className="source-tag">
+          {cached ? "cached draft" : "freshly drafted"}
+        </span>
       </div>
       {factSections.map((section) => (
         <ArtifactSectionCard key={section.key} section={section} />
       ))}
       <h2 className="swot-heading">SWOT</h2>
-      <section className="swot-grid">
+      <div className="swot-grid">
         {swotSections.map((section) => (
           <div key={section.key} className={`swot-cell swot-${section.key.replace("swot_", "")}`}>
             <ArtifactSectionCard section={section} />
           </div>
         ))}
-      </section>
-    </article>
+      </div>
+    </div>
   );
 }
 
 export function FinancialsCard({ response }: { response: FinancialsResponse }) {
   const { artifact, cached } = response;
   return (
-    <article>
+    <div className="report-view">
       <div className="report-meta">
-        <span className="meta-text">
-          Step 3 · Financials · {artifact.ticker}
-          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
-          {artifact.scope.items.join(", ")}
+        <span>
+          Financials · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""}
         </span>
-        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+        <span className="source-tag">
+          {cached ? "cached draft" : "freshly drafted"}
+        </span>
       </div>
       {artifact.tables.map((table) => (
         <FinancialsTableCard key={table.key} table={table} />
@@ -137,26 +173,27 @@ export function FinancialsCard({ response }: { response: FinancialsResponse }) {
       {artifact.sections.map((section) => (
         <ArtifactSectionCard key={section.key} section={section} />
       ))}
-    </article>
+    </div>
   );
 }
 
 export function StrategyCard({ response }: { response: StrategyResponse }) {
   const { artifact, cached } = response;
   return (
-    <article>
+    <div className="report-view">
       <div className="report-meta">
-        <span className="meta-text">
-          Step 4 · Strategy · {artifact.ticker}
-          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""} ·{" "}
-          {artifact.scope.items.join(", ")}
+        <span>
+          Strategy · {artifact.ticker}
+          {artifact.fiscal_year ? ` · FY${artifact.fiscal_year}` : ""}
         </span>
-        <span className="meta-text">{cached ? "cached draft" : "freshly drafted"}</span>
+        <span className="source-tag">
+          {cached ? "cached draft" : "freshly drafted"}
+        </span>
       </div>
       {artifact.returns && <FinancialsTableCard table={artifact.returns} />}
       {artifact.sections.map((section) => (
         <ArtifactSectionCard key={section.key} section={section} />
       ))}
-    </article>
+    </div>
   );
 }

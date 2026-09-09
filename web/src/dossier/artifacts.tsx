@@ -11,13 +11,16 @@ export function ArtifactSectionCard({ section }: { section: ArtifactSection }) {
     <section className="artifact-section">
       <h2>{section.heading}</h2>
       <p className="artifact-content">{section.content}</p>
-      <div className="source-tags">
-        {section.sources.map((tag, i) => (
-          <span key={i} className={`source-tag source-${tag.type}`}>
-            {sourceTagLabel(tag)}
-          </span>
-        ))}
-      </div>
+      {section.sources.length > 0 && (
+        <div className="source-tags">
+          <span className="tags-label">Sources</span>
+          {section.sources.map((tag, i) => (
+            <span key={i} className={`source-tag source-${tag.type}`}>
+              {sourceTagLabel(tag)}
+            </span>
+          ))}
+        </div>
+      )}
       {section.evidence.length > 0 && (
         <details className="evidence-block">
           <summary>Source quotes</summary>

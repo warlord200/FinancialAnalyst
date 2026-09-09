@@ -8,6 +8,7 @@ import { FinancialsStepPanel } from "./financialsStepPanel";
 import { StrategyStepPanel } from "./strategyStepPanel";
 import { ValuationStepPanel } from "./valuationStepPanel";
 import { ThesisStepPanel } from "./thesisStepPanel";
+import { ArrowLeftIcon } from "./icons";
 
 function statusLabel(gate: { status: string } | null): { text: string; kind: string } {
   const status = gate?.status === "accepted" || gate?.status === "rejected" ? gate.status : null;
@@ -141,31 +142,48 @@ export function CompanyWorkspace({
   }
 
   return (
-    <section className="workspace">
-      <div className="workspace-toolbar">
-        <button type="button" className="link-button" onClick={onBack}>
-          ← {backLabel}
+    <div className="page workspace-page">
+      <div className="workspace-head">
+        <button type="button" className="workspace-back" onClick={onBack}>
+          <ArrowLeftIcon size={15} />
+          {backLabel}
         </button>
-        <h2 className="workspace-ticker">{ticker}</h2>
-        <span className={`status-chip status-${status.kind}`}>{status.text}</span>
-        <span className="workspace-spacer" />
-        <button type="button" className="link-button" onClick={onOpenNumbers}>
-          Numbers view (gate-free)
-        </button>
+        <div className="workspace-title">
+          <h1>{ticker}</h1>
+          <span className="sub">Six-step dossier</span>
+          <span className={`status-chip status-${status.kind}`}>{status.text}</span>
+        </div>
+        <div className="workspace-actions">
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenNumbers}>
+            Numbers view
+          </button>
+        </div>
       </div>
-      <div className="panel-card">
+
+      <div className="dossier-doc">
         <DossierStrip
           gate={gate}
           done={done}
           activeStep={activeStep}
           onSelect={onSelectStep}
         />
+        {dossier.progressLoading && (
+          <div className="dossier-body">
+            <div className="status">
+              <span className="spinner" aria-hidden="true" />
+              <span>Loading dossier progress…</span>
+            </div>
+          </div>
+        )}
+        {!dossier.progressLoading && dossier.progressError && (
+          <div className="dossier-body">
+            <div className="error-banner">{dossier.progressError}</div>
+          </div>
+        )}
+        {!dossier.progressLoading && !dossier.progressError && (
+          <div className="dossier-body">{content}</div>
+        )}
       </div>
-      {dossier.progressLoading && <div className="status">Loading dossier progress…</div>}
-      {!dossier.progressLoading && dossier.progressError && (
-        <div className="error-banner">{dossier.progressError}</div>
-      )}
-      <div className="workspace-content">{content}</div>
-    </section>
+    </div>
   );
 }

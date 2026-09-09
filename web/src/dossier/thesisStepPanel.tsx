@@ -34,22 +34,35 @@ export function ThesisStepPanel({
   }, [ticker, response, loading, error, onLoad]);
 
   if (!ticker) {
-    return (
-      <main className="content">
-        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-      </main>
-    );
+    return <NoCompanyPrompt onOpenIngest={onOpenIngest} />;
   }
 
   return (
-    <main className="content">
-      <div className="search">
-        <span className="meta-text">Step 6 · Thesis · {ticker}</span>
-        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-          Analyze
-        </button>
-      </div>
-      {loading && <div className="status">Drafting thesis…</div>}
+    <div className="step-panel">
+      <header className="step-panel-head">
+        <div className="step-panel-title">
+          <h2>Thesis</h2>
+          <p className="step-scope">
+            Step 6 of 6 · {ticker} · the whole dossier, drawn into an
+            investment view you can save to your Library
+          </p>
+        </div>
+        <div className="step-panel-actions">
+          <button
+            onClick={() => onLoad(ticker)}
+            disabled={loading}
+            className="btn btn-secondary btn-sm"
+          >
+            {loading ? "Drafting…" : "Re-draft"}
+          </button>
+        </div>
+      </header>
+      {loading && (
+        <div className="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>Drafting thesis…</span>
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
       {response && <ThesisPanel response={response} />}
       {(saved || Boolean(response?.thesis)) && (
@@ -61,6 +74,6 @@ export function ThesisStepPanel({
           onUnsave={onUnsaveFromLibrary}
         />
       )}
-    </main>
+    </div>
   );
 }

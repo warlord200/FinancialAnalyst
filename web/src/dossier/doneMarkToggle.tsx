@@ -1,3 +1,5 @@
+import { CheckIcon } from "./icons";
+
 export function DoneMarkToggle({
   done,
   opensLabel,
@@ -10,9 +12,15 @@ export function DoneMarkToggle({
   if (done) {
     return (
       <div className="done-mark done">
-        <span className="badge badge-pass">Marked done</span>
-        <span className="meta-text">Un-marking re-locks Steps 5-6.</span>
-        <button type="button" className="link-button" onClick={() => onToggle(false)}>
+        <CheckIcon size={16} />
+        <div className="done-mark-text">
+          <strong>Marked done.</strong> You reviewed this step.
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => onToggle(false)}
+        >
           Un-mark done
         </button>
       </div>
@@ -20,10 +28,13 @@ export function DoneMarkToggle({
   }
   return (
     <div className="done-mark">
-      <button type="button" className="primary" onClick={() => onToggle(true)}>
+      <div className="done-mark-text">
+        Reviewed this step? Marking it done is two-way — you can un-mark any
+        time.
+      </div>
+      <button type="button" className="btn btn-primary btn-sm" onClick={() => onToggle(true)}>
         Mark done — {opensLabel}
       </button>
-      <span className="meta-text">Done marks are two-way: you can un-mark later.</span>
     </div>
   );
 }

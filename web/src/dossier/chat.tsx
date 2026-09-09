@@ -57,10 +57,8 @@ export function ChatPanel({
 
   return (
     <section className="chat-panel">
-      <div className="chat-meta">
-        <span className="meta-text">
-          Chat · {label} · scoped to this step's source material
-        </span>
+      <div className="panel-title">
+        <span>Ask this dossier</span>
         <label className="chat-search-all">
           <input
             type="checkbox"
@@ -70,9 +68,12 @@ export function ChatPanel({
           Search everything
         </label>
       </div>
+      <p className="step-scope" style={{ marginBottom: 2 }}>
+        Chat · {label} · scoped to this step's source material
+      </p>
       <div className="chat-log">
         {messages.length === 0 && (
-          <p className="meta-text">Ask a question about this step's source material.</p>
+          <p className="empty-copy">Ask a question about this step's source material.</p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`chat-msg chat-${m.role}`}>
@@ -112,8 +113,9 @@ export function ChatPanel({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
           placeholder={`Ask about ${ticker}…`}
+          className="text-input"
         />
-        <button onClick={send} disabled={busy || !input.trim()} className="primary">
+        <button onClick={send} disabled={busy || !input.trim()} className="btn btn-primary">
           Send
         </button>
       </div>

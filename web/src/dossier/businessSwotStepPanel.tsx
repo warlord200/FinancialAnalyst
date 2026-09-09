@@ -29,26 +29,43 @@ export function BusinessSwotStepPanel({
   }, [ticker, response, loading, error, onLoad]);
 
   if (!ticker) {
-    return (
-      <main className="content">
-        <NoCompanyPrompt onOpenIngest={onOpenIngest} />
-      </main>
-    );
+    return <NoCompanyPrompt onOpenIngest={onOpenIngest} />;
   }
 
   return (
-    <main className="content">
-      <div className="search">
-        <span className="meta-text">Step 2 · Business & SWOT · {ticker}</span>
-        <button onClick={() => onLoad(ticker)} disabled={loading} className="primary">
-          Analyze
-        </button>
-      </div>
-      <DoneMarkToggle done={done} opensLabel="open Step 3" onToggle={onToggleDone} />
-      {loading && <div className="status">Drafting Business & SWOT…</div>}
+    <div className="step-panel">
+      <header className="step-panel-head">
+        <div className="step-panel-title">
+          <h2>Business &amp; SWOT</h2>
+          <p className="step-scope">
+            Step 2 of 6 · {ticker} · grounded in the 10-K Item 1 and Item 1A scope
+          </p>
+        </div>
+        <div className="step-panel-actions">
+          <button
+            onClick={() => onLoad(ticker)}
+            disabled={loading}
+            className="btn btn-secondary btn-sm"
+          >
+            {loading ? "Drafting…" : response ? "Re-draft" : "Draft"}
+          </button>
+        </div>
+      </header>
+      {loading && (
+        <div className="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>Drafting Business &amp; SWOT…</span>
+        </div>
+      )}
       {error && <div className="error-banner">{error}</div>}
       {response && <BusinessSwotCard response={response} />}
-      {response && <ChatPanel ticker={ticker} step={2} label="Business & SWOT" />}
-    </main>
+      {response && (
+        <>
+          <div className="panel-divider" />
+          <ChatPanel ticker={ticker} step={2} label="Business & SWOT" />
+        </>
+      )}
+      <DoneMarkToggle done={done} opensLabel="open Step 3" onToggle={onToggleDone} />
+    </div>
   );
 }

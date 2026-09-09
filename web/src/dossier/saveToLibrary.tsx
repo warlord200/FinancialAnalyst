@@ -1,3 +1,5 @@
+import { BookmarkIcon, CheckIcon } from "./icons";
+
 export function SaveToLibrary({
   saved,
   busy,
@@ -15,18 +17,28 @@ export function SaveToLibrary({
     <>
       {saved ? (
         <div className="save-to-library">
-          <span className="saved-badge">✓ Saved to library</span>
-          <button type="button" className="link-button" disabled={busy} onClick={onUnsave}>
+          <span className="saved-badge">
+            <CheckIcon size={15} />
+            Saved to library
+          </span>
+          <button
+            type="button"
+            className="link-button"
+            disabled={busy}
+            onClick={onUnsave}
+          >
             Unsave
           </button>
         </div>
       ) : (
         <div className="save-to-library">
-          <button type="button" className="primary" disabled={busy} onClick={onSave}>
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={onSave}>
+            <BookmarkIcon size={15} />
             Save to library
           </button>
-          <span className="meta-text">
-            Read-only, source-tagged thesis. Saving moves the completed company into your Library.
+          <span className="save-note">
+            A read-only, source-tagged thesis. Saving moves the completed
+            company into your Library.
           </span>
         </div>
       )}

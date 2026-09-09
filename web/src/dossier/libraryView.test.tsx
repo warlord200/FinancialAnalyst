@@ -89,11 +89,7 @@ describe("LibraryView", () => {
 
   it("shows an empty note when there are no rows", () => {
     const { container } = renderView({ rows: [] });
-    expect(
-      screen.getByText(
-        "Nothing saved yet — finish a dossier and Save to library at the end of Step 6."
-      )
-    ).toBeDefined();
+    expect(screen.getByText("Nothing saved yet.")).toBeDefined();
     expect(container.querySelector("table")).toBeNull();
   });
 });

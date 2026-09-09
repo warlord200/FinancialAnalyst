@@ -31,6 +31,11 @@ import { CompanyWorkspace } from "./dossier/companyWorkspace";
 import { NoCompanyPrompt } from "./dossier/noCompany";
 import { PortfolioView } from "./dossier/portfolioView";
 import { LibraryView } from "./dossier/libraryView";
+import {
+  BrandMark,
+  LogOutIcon,
+  SearchIcon,
+} from "./dossier/icons";
 
 type Phase = "idle" | "ingesting" | "error";
 type Section = "portfolio" | "dossier" | "numbers" | "eval" | "library";
@@ -63,31 +68,33 @@ function MatrixTable({
   return (
     <section className="matrix-block">
       <h2>{title}</h2>
-      <table className="matrix">
-        <thead>
-          <tr>
-            <th className="row-label">Line</th>
-            {columns.map((column) => (
-              <th key={column}>{yearLabel ? yearLabel(column) : column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, byYear]) => (
-            <tr key={label}>
-              <td className="row-label">{label}</td>
-              {columns.map((column) => {
-                const value = byYear[column];
-                return (
-                  <td key={column}>
-                    {value === undefined ? "—" : format ? format(value) : formatMoney(value)}
-                  </td>
-                );
-              })}
+      <div className="matrix-scroll">
+        <table className="matrix">
+          <thead>
+            <tr>
+              <th className="row-label">Line</th>
+              {columns.map((column) => (
+                <th key={column}>{yearLabel ? yearLabel(column) : column}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map(([label, byYear]) => (
+              <tr key={label}>
+                <td className="row-label">{label}</td>
+                {columns.map((column) => {
+                  const value = byYear[column];
+                  return (
+                    <td key={column}>
+                      {value === undefined ? "—" : format ? format(value) : formatMoney(value)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -105,15 +112,6 @@ function PriceCard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const price = numbers.price;
-
-  if (!price) {
-    return (
-      <section className="price-card">
-        <h2>Price</h2>
-        <p className="meta-text">No price available yet.</p>
-      </section>
-    );
-  }
 
   async function saveOverride() {
     const parsed = parseFloat(override);
@@ -143,23 +141,29 @@ function PriceCard({
     }
   }
 
+  if (!price) {
+    return (
+      <div className="price-card">
+        <h2>Price</h2>
+        <p className="meta-text">No price available yet.</p>
+      </div>
+    );
+  }
+
   return (
-    <section className="price-card">
-      <h2>Price</h2>
-      <p>
-        Current: <strong>${price.effective.price.toFixed(2)}</strong>{" "}
+    <div className="price-card">
+      <div className="price-top">
+        <h2>Price</h2>
+        <span className="price-value">${price.effective.price.toFixed(2)}</span>
         <span className="meta-text">
-          ({price.effective.source === "override" ? "manual override" : "yahoo finance"})
+          {price.effective.source === "override" ? "manual override" : "yahoo finance"}
         </span>
-      </p>
-      {price.override && (
-        <p className="meta-text">
-          Override ${price.override.price.toFixed(2)} set {price.override.set_at.slice(0, 10)}.{" "}
-          <button onClick={removeOverride} disabled={saving} className="link-button">
-            Remove
-          </button>
-        </p>
-      )}
+        {price.override && (
+          <span className="meta-text">
+            Override ${price.override.price.toFixed(2)} set {price.override.set_at.slice(0, 10)}.
+          </span>
+        )}
+      </div>
       <div className="override-row">
         <input
           type="number"
@@ -168,16 +172,26 @@ function PriceCard({
           value={override}
           onChange={(e) => setOverride(e.target.value)}
           placeholder="Manual price override"
+          className="text-input"
         />
-        <button onClick={saveOverride} disabled={saving} className="primary">
+        <button onClick={saveOverride} disabled={saving} className="btn btn-secondary btn-sm">
           Override
         </button>
+        {price.override && (
+          <button
+            onClick={removeOverride}
+            disabled={saving}
+            className="link-button"
+          >
+            Remove override
+          </button>
+        )}
       </div>
       {error && <div className="error-banner">{error}</div>}
       {price.history.length > 0 && (
         <p className="meta-text">Price history: {price.history.length} daily points.</p>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -211,47 +225,109 @@ function AuthPanel({
   }
 
   return (
-    <div className="auth-panel">
-      <h2>{mode === "login" ? "Log in" : "Create an account"}</h2>
-      <p className="meta-text">
-        {mode === "signup"
-          ? "Accounts work immediately. Unverified accounts get stricter daily quotas."
-          : "Log in to analyze tickers and track your daily quota."}
-      </p>
-      <div className="auth-form">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="you@example.com"
-          autoComplete="email"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="Password (min 8 characters)"
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-        />
-        <button onClick={submit} disabled={busy} className="primary">
-          {busy ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
-        </button>
+    <div className="auth-shell">
+      <div className="auth-card card">
+        <div className="auth-inner">
+          <a className="auth-brand" href="/" onClick={(e) => e.preventDefault()}>
+            <span className="brand-mark">
+              <BrandMark />
+            </span>
+            <span className="brand-name">Financial Analyst</span>
+          </a>
+          <h1 className="auth-title">{mode === "login" ? "Log in" : "Create an account"}</h1>
+          <p className="auth-sub">
+            {mode === "signup"
+              ? "Accounts work immediately. Unverified accounts get stricter daily quotas."
+              : "Log in to analyze tickers and track your daily quota."}
+          </p>
+          <form
+            className="auth-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              className="text-input"
+              aria-label="Email"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={mode === "signup" ? "Password (min 8 characters)" : "Password"}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              className="text-input"
+              aria-label="Password"
+            />
+            <button type="submit" disabled={busy} className="btn btn-primary">
+              {busy ? "Please wait…" : mode === "login" ? "Log in" : "Sign up"}
+            </button>
+          </form>
+          {error && (
+            <div className="error-banner" style={{ marginTop: 14 }}>
+              {error}
+            </div>
+          )}
+          <div className="auth-foot">
+            <span className="meta-text">
+              {mode === "login" ? "No account yet? " : "Already have an account? "}
+              <button
+                className="link-button"
+                onClick={() => {
+                  setMode(mode === "login" ? "signup" : "login");
+                  setError("");
+                }}
+              >
+                {mode === "login" ? "Sign up" : "Log in"}
+              </button>
+            </span>
+          </div>
+        </div>
       </div>
-      {error && <div className="error-banner">{error}</div>}
-      <p className="meta-text">
-        {mode === "login" ? "No account yet? " : "Already have an account? "}
-        <button
-          className="link-button"
-          onClick={() => {
-            setMode(mode === "login" ? "signup" : "login");
-            setError("");
-          }}
-        >
-          {mode === "login" ? "Sign up" : "Log in"}
-        </button>
-      </p>
+    </div>
+  );
+}
+
+function QuotaMeter({ quota }: { quota: QuotaStatus }) {
+  const analysesPct = Math.min(100, (quota.analyses.used / Math.max(quota.analyses.limit, 1)) * 100);
+  const chatPct = Math.min(100, (quota.chat.used / Math.max(quota.chat.limit, 1)) * 100);
+  const meterVar = (pct: number) => ({ ["--meter-p" as string]: `${pct / 100}` });
+  return (
+    <div className="quota" title="Daily quotas reset at midnight (UTC)">
+      <div className="quota-item">
+        <div className="quota-top">
+          <span className="quota-label">Analyses</span>
+          <span className="quota-value">
+            {quota.analyses.used}/{quota.analyses.limit}
+          </span>
+        </div>
+        <div className="meter">
+          <div
+            className={`meter-fill${analysesPct >= 100 ? " exhausted" : ""}`}
+            style={meterVar(analysesPct)}
+          />
+        </div>
+      </div>
+      <div className="quota-item">
+        <div className="quota-top">
+          <span className="quota-label">Chat</span>
+          <span className="quota-value">
+            {quota.chat.used}/{quota.chat.limit}
+          </span>
+        </div>
+        <div className="meter">
+          <div
+            className={`meter-fill${chatPct >= 100 ? " exhausted" : ""}`}
+            style={meterVar(chatPct)}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -459,7 +535,7 @@ export default function App() {
     }
   }
 
-  const activeSection = (s: Section) => (section === s ? "tab active" : "tab");
+  const activeSection = (s: Section) => (section === s ? "navtab active" : "navtab");
 
   return (
     <div className="app">
@@ -467,84 +543,114 @@ export default function App() {
         <AuthPanel onAuthenticated={handleAuthenticated} />
       ) : (
         <>
-          <header className="header">
-            <h1>Financial Analyst</h1>
-            <div className="user-bar">
-              <span className="meta-text">
-                {user.email}
-                {user.verified ? " · verified" : " · unverified"}
-              </span>
-              {quota && (
-                <span className="meta-text">
-                  analyses {quota.analyses.used}/{quota.analyses.limit} · chat{" "}
-                  {quota.chat.used}/{quota.chat.limit}
+          <header className="topbar">
+            <div className="topbar-inner">
+              <a className="brand" href="/" onClick={(e) => e.preventDefault()}>
+                <span className="brand-mark">
+                  <BrandMark />
                 </span>
-              )}
-              <button onClick={handleLogout} className="link-button">
-                Log out
-              </button>
-            </div>
-            <nav className="tabs">
-              <button
-                className={activeSection("portfolio")}
-                onClick={() => setSection("portfolio")}
-              >
-                Portfolio
-              </button>
-              <button className={activeSection("library")} onClick={() => setSection("library")}>
-                Library
-              </button>
-              {company && (
-                <button className={activeSection("dossier")} onClick={() => setSection("dossier")}>
-                  Dossier
+                <span className="brand-name">Financial Analyst</span>
+              </a>
+              <nav className="mainnav" aria-label="Sections">
+                <button
+                  className={activeSection("portfolio")}
+                  onClick={() => setSection("portfolio")}
+                >
+                  Portfolio
                 </button>
-              )}
-              <button className={activeSection("numbers")} onClick={() => openNumbers()}>
-                Numbers
-              </button>
-              <button
-                className={activeSection("eval")}
-                onClick={() => {
-                  setSection("eval");
-                  loadEval();
-                }}
-              >
-                Eval
-              </button>
-            </nav>
+                <button className={activeSection("library")} onClick={() => setSection("library")}>
+                  Library
+                </button>
+                {company && (
+                  <button
+                    className={activeSection("dossier")}
+                    onClick={() => setSection("dossier")}
+                  >
+                    Dossier
+                  </button>
+                )}
+                <button className={activeSection("numbers")} onClick={() => openNumbers()}>
+                  Numbers
+                </button>
+              </nav>
+              <div className="topbar-spacer" />
+              {quota && <QuotaMeter quota={quota} />}
+              <div className="account">
+                <span className="account-email" title={user.email}>
+                  {user.email}
+                </span>
+                <span
+                  className={`tier-dot ${user.verified ? "verified" : "unverified"}`}
+                  title={user.verified ? "Verified account" : "Unverified account"}
+                />
+                <button
+                  className="dev-link"
+                  title="Retrieval-quality measurements"
+                  onClick={() => {
+                    setSection("eval");
+                    loadEval();
+                  }}
+                >
+                  Eval
+                </button>
+                <button onClick={handleLogout} className="logout-btn">
+                  <LogOutIcon />
+                  <span>Log out</span>
+                </button>
+              </div>
+            </div>
           </header>
 
           {section === "portfolio" ? (
-            <main className="content">
-              <div className="search">
-                <input
-                  value={tickerInput}
-                  onChange={(e) => setTickerInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && run(tickerInput)}
-                  placeholder="e.g. TSLA"
-                  className="ticker-input"
-                />
+            <main className="page">
+              <div className="page-head">
+                <div>
+                  <h1>Portfolio</h1>
+                  <p className="page-sub">
+                    Every ticker you have ingested, with its dossier progress and
+                    gate status. Open one to continue its analysis.
+                  </p>
+                </div>
+              </div>
+              <div className="ingest-bar" role="search">
+                <div className="ingest-field">
+                  <SearchIcon />
+                  <input
+                    value={tickerInput}
+                    onChange={(e) => setTickerInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && run(tickerInput)}
+                    placeholder="e.g. TSLA"
+                    className="text-input"
+                    aria-label="Ticker to ingest"
+                  />
+                </div>
                 <button
                   onClick={() => run(tickerInput)}
                   disabled={phase === "ingesting"}
-                  className="primary"
+                  className="btn btn-primary"
                 >
-                  Ingest
+                  {phase === "ingesting" ? "Ingesting…" : "Ingest"}
                 </button>
               </div>
 
               {phase === "ingesting" && (
                 <div className="status">
                   <span className="spinner" aria-hidden="true" />
-                  {job
-                    ? `Ingesting ${job.ticker} — ${job.status} (${job.progress}%)`
-                    : `Ingesting ${tickerInput.toUpperCase()} — starting job…`}
-                  <progress
-                    value={job?.progress ?? 0}
-                    max={100}
-                    style={{ display: "block", width: "100%", marginTop: 8 }}
-                  />
+                  <span>
+                    {job
+                      ? `Ingesting ${job.ticker} — ${job.status} (${job.progress}%)`
+                      : `Ingesting ${tickerInput.toUpperCase()} — starting job…`}
+                  </span>
                 </div>
+              )}
+
+              {phase === "ingesting" && job && (
+                <progress
+                  className="ingest-progress"
+                  value={job.progress}
+                  max={100}
+                  aria-hidden="true"
+                />
               )}
 
               {phase === "error" && <div className="error-banner">{error}</div>}
@@ -557,14 +663,17 @@ export default function App() {
               />
             </main>
           ) : section === "library" ? (
-            <main className="content">
-              <p className="meta-text">
-                Tickers whose Step 6 thesis you saved. Open one to view its read-only
-                thesis.
-              </p>
-              {library.actionError && (
-                <div className="error-banner">{library.actionError}</div>
-              )}
+            <main className="page">
+              <div className="page-head">
+                <div>
+                  <h1>Library</h1>
+                  <p className="page-sub">
+                    Tickers whose Step 6 thesis you saved. Open one to view its
+                    read-only, source-tagged thesis.
+                  </p>
+                </div>
+              </div>
+              {library.actionError && <div className="error-banner">{library.actionError}</div>}
               <LibraryView
                 rows={library.rows}
                 loading={library.loading}
@@ -597,70 +706,91 @@ export default function App() {
                 }}
               />
             ) : (
-              <main className="content">
+              <main className="page">
                 <NoCompanyPrompt onOpenIngest={() => setSection("portfolio")} />
               </main>
             )
           ) : section === "numbers" ? (
-            <div className="layout">
-              <main className="content">
-                <div className="search">
+            <main className="page">
+              <div className="page-head">
+                <div>
+                  <h1>Numbers view</h1>
+                  <p className="page-sub">
+                    Raw statements and price — its own section, separate from the
+                    dossier steps and free of the gate.
+                  </p>
+                </div>
+              </div>
+              <div className="search numbers-toolbar">
+                <div className="ingest-field">
+                  <SearchIcon />
                   <input
                     value={numbersTicker}
                     onChange={(e) => setNumbersTicker(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && loadNumbers(numbersTicker, false)}
                     placeholder="e.g. TSLA"
-                    className="ticker-input"
+                    className="text-input"
+                    aria-label="Ticker to load"
                   />
-                  <button
-                    onClick={() => loadNumbers(numbersTicker, false)}
-                    disabled={numbersLoading}
-                    className="primary"
-                  >
-                    Load
-                  </button>
-                  <button
-                    onClick={() => loadNumbers(numbersTicker, true)}
-                    disabled={numbersLoading}
-                    className="primary"
-                  >
-                    Refresh
-                  </button>
                 </div>
-                {numbersLoading && <div className="status">Loading numbers…</div>}
-                {numbersError && <div className="error-banner">{numbersError}</div>}
-                {numbers && (
-                  <article>
-                    <div className="report-meta">
-                      <span className="meta-text">
-                        {numbers.ticker} · refreshed {numbers.refreshed_at.slice(0, 10)} · fiscal
-                        years {numbers.financials.fiscal_years.join(", ")}
-                      </span>
+                <button
+                  onClick={() => loadNumbers(numbersTicker, false)}
+                  disabled={numbersLoading}
+                  className="btn btn-primary btn-sm"
+                >
+                  Load
+                </button>
+                <button
+                  onClick={() => loadNumbers(numbersTicker, true)}
+                  disabled={numbersLoading}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Refresh from EDGAR
+                </button>
+              </div>
+              {numbersLoading && (
+                <div className="status">
+                  <span className="spinner" aria-hidden="true" />
+                  <span>Loading numbers…</span>
+                </div>
+              )}
+              {numbersError && <div className="error-banner">{numbersError}</div>}
+              {numbers && (
+                <div className="card">
+                  <div className="doc-body">
+                    <div className="numbers-meta">
+                      <div className="numbers-headline">
+                        <span className="ticker">{numbers.ticker}</span>
+                        <span className="meta-text">
+                          refreshed {numbers.refreshed_at.slice(0, 10)} · fiscal years{" "}
+                          {numbers.financials.fiscal_years.join(", ")}
+                        </span>
+                      </div>
                     </div>
                     <PriceCard ticker={numbers.ticker} numbers={numbers} onSaved={setNumbers} />
                     <MatrixTable
-                      title="Income Statement"
+                      title="Income statement"
                       matrix={numbers.financials.income_statement}
                       years={numbers.financials.fiscal_years.map(String)}
                     />
                     <MatrixTable
-                      title="Balance Sheet"
+                      title="Balance sheet"
                       matrix={numbers.financials.balance_sheet}
                       years={numbers.financials.fiscal_years.map(String)}
                     />
                     <MatrixTable
-                      title="Cash Flow"
+                      title="Cash flow"
                       matrix={numbers.financials.cash_flow}
                       years={numbers.financials.fiscal_years.map(String)}
                     />
                     <MatrixTable
-                      title="Common-Size Income (% of revenue)"
+                      title="Common-size income (% of revenue)"
                       matrix={numbers.financials.common_size.income_statement}
                       years={numbers.financials.fiscal_years.map(String)}
                       format={formatPercent}
                     />
                     <MatrixTable
-                      title="Common-Size Balance (% of assets)"
+                      title="Common-size balance (% of assets)"
                       matrix={numbers.financials.common_size.balance_sheet}
                       years={numbers.financials.fiscal_years.map(String)}
                       format={formatPercent}
@@ -673,37 +803,48 @@ export default function App() {
                       yearLabel={(span) => `${span}y`}
                       format={formatPercent}
                     />
-                  </article>
-                )}
-              </main>
-            </div>
+                  </div>
+                </div>
+              )}
+            </main>
           ) : (
-            <div className="layout">
-              <main className="content">
-                <div className="report-meta">
-                  <span className="meta-text">
-                    Retrieval-quality gate · updated{" "}
-                    {evalSummary?.generated_at
-                      ? new Date(evalSummary.generated_at).toLocaleString()
-                      : "never"}
-                  </span>
+            <main className="page">
+              <div className="page-head">
+                <div>
+                  <h1>Eval</h1>
+                  <p className="page-sub">
+                    Retrieval-quality measurements per configuration — the
+                    evidence behind this product. A quiet corner, not a part of
+                    the investor workflow.
+                  </p>
                 </div>
                 <div className="search">
-                  <button onClick={loadEval} disabled={evalLoading} className="primary">
+                  <button onClick={loadEval} disabled={evalLoading} className="btn btn-secondary btn-sm">
                     Refresh
                   </button>
                 </div>
-                {evalLoading && <div className="status">Loading eval results…</div>}
-                {evalError && <div className="error-banner">{evalError}</div>}
-                {!evalLoading && !evalError && evalSummary && <EvalPanel summary={evalSummary} />}
-                {!evalLoading && !evalError && !evalSummary && (
-                  <div className="status">
-                    No eval results yet — run the eval CLI (python -m
-                    financial_analyst.evaluation.cli).
+              </div>
+              {evalLoading && (
+                <div className="status">
+                  <span className="spinner" aria-hidden="true" />
+                  <span>Loading eval results…</span>
+                </div>
+              )}
+              {evalError && <div className="error-banner">{evalError}</div>}
+              {!evalLoading && !evalError && evalSummary && (
+                <div className="card">
+                  <div className="doc-body">
+                    <EvalPanel summary={evalSummary} />
                   </div>
-                )}
-              </main>
-            </div>
+                </div>
+              )}
+              {!evalLoading && !evalError && !evalSummary && (
+                <div className="status">
+                  No eval results yet — run the eval CLI (python -m
+                  financial_analyst.evaluation.cli curated | regression | smoke).
+                </div>
+              )}
+            </main>
           )}
         </>
       )}
@@ -732,40 +873,42 @@ function EvalPanel({ summary }: { summary: EvalSummary }) {
   const when = (iso: string) => (iso ? new Date(iso).toLocaleString() : "");
 
   return (
-    <article>
+    <div className="report-view">
       {summary.curated.length > 0 && (
         <section className="eval-block">
           <h2>Curated Tesla benchmark · per-step retrieval</h2>
           {summary.curated.map((entry) => (
             <div key={`${entry.name}-${entry.config}-${entry.run_at}`} className="eval-run">
               <div className="report-meta">
-                <span className="meta-text">
+                <span>
                   {entry.name} · {entry.ticker} · {entry.config} · top_k {entry.top_k} ·{" "}
                   {when(entry.run_at)}
                 </span>
               </div>
-              <table className="matrix">
-                <thead>
-                  <tr>
-                    <th className="row-label">Dossier step</th>
-                    <th>Queries</th>
-                    <th>MRR</th>
-                    <th>Hit rate</th>
-                    <th>NDCG</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(entry.per_step).map(([step, m]) => (
-                    <tr key={step}>
-                      <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
-                      <td>{m.num_queries}</td>
-                      <td>{fmt(m.mrr)}</td>
-                      <td>{fmt(m.hit_rate)}</td>
-                      <td>{fmt(m.ndcg)}</td>
+              <div className="matrix-scroll">
+                <table className="matrix">
+                  <thead>
+                    <tr>
+                      <th className="row-label">Dossier step</th>
+                      <th>Queries</th>
+                      <th>MRR</th>
+                      <th>Hit rate</th>
+                      <th>NDCG</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {Object.entries(entry.per_step).map(([step, m]) => (
+                      <tr key={step}>
+                        <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
+                        <td>{m.num_queries}</td>
+                        <td>{fmt(m.mrr)}</td>
+                        <td>{fmt(m.hit_rate)}</td>
+                        <td>{fmt(m.ndcg)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </section>
@@ -774,42 +917,44 @@ function EvalPanel({ summary }: { summary: EvalSummary }) {
       {summary.regression.length > 0 && (
         <section className="eval-block">
           <h2>Synthetic regression sets · continuity vs baseline</h2>
-          <table className="matrix">
-            <thead>
-              <tr>
-                <th className="row-label">Dataset</th>
-                <th>Config</th>
-                <th>Queries</th>
-                <th>MRR</th>
-                <th>Hit rate</th>
-                <th>NDCG</th>
-                <th>Baseline MRR</th>
-                <th>Δ MRR</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {summary.regression.map((r) => (
-                <tr key={`${r.dataset}-${r.config}`}>
-                  <td className="row-label">{r.dataset}</td>
-                  <td>{r.config}</td>
-                  <td>{r.num_queries}</td>
-                  <td>{fmt(r.mrr)}</td>
-                  <td>{fmt(r.hit_rate)}</td>
-                  <td>{fmt(r.ndcg)}</td>
-                  <td>{fmt(r.baseline_mrr)}</td>
-                  <td>{fmtDelta(r.delta_mrr)}</td>
-                  <td>
-                    <span className={r.regressed ? "badge badge-fail" : "badge badge-pass"}>
-                      {r.regressed
-                        ? `REGRESSION${r.regressions.length ? `: ${r.regressions.join(", ")}` : ""}`
-                        : "OK"}
-                    </span>
-                  </td>
+          <div className="matrix-scroll">
+            <table className="matrix">
+              <thead>
+                <tr>
+                  <th className="row-label">Dataset</th>
+                  <th>Config</th>
+                  <th>Queries</th>
+                  <th>MRR</th>
+                  <th>Hit rate</th>
+                  <th>NDCG</th>
+                  <th>Baseline MRR</th>
+                  <th>Δ MRR</th>
+                  <th>Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {summary.regression.map((r) => (
+                  <tr key={`${r.dataset}-${r.config}`}>
+                    <td className="row-label">{r.dataset}</td>
+                    <td>{r.config}</td>
+                    <td>{r.num_queries}</td>
+                    <td>{fmt(r.mrr)}</td>
+                    <td>{fmt(r.hit_rate)}</td>
+                    <td>{fmt(r.ndcg)}</td>
+                    <td>{fmt(r.baseline_mrr)}</td>
+                    <td>{fmtDelta(r.delta_mrr)}</td>
+                    <td>
+                      <span className={r.regressed ? "badge badge-fail" : "badge badge-pass"}>
+                        {r.regressed
+                          ? `REGRESSION${r.regressions.length ? `: ${r.regressions.join(", ")}` : ""}`
+                          : "OK"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       )}
 
@@ -819,37 +964,39 @@ function EvalPanel({ summary }: { summary: EvalSummary }) {
           {summary.smoke.map((s) => (
             <div key={`${s.ticker}-${s.run_at}`} className="eval-run">
               <div className="report-meta">
-                <span className="meta-text">{s.ticker} · {when(s.run_at)} · </span>
+                <span>{s.ticker} · {when(s.run_at)} · </span>
                 <span className={s.passed ? "badge badge-pass" : "badge badge-fail"}>
                   {s.passed ? "PASS" : "FAIL"}
                 </span>
               </div>
-              <table className="matrix">
-                <thead>
-                  <tr>
-                    <th className="row-label">Step</th>
-                    <th>Samples</th>
-                    <th>Self-hit rate</th>
-                    <th>In-scope rate</th>
-                    <th>Missing scope items</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(s.steps).map(([step, r]) => (
-                    <tr key={step}>
-                      <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
-                      <td>{r.skipped ? "skipped" : r.samples}</td>
-                      <td>{r.skipped ? "n/a" : fmt(r.retrieval_hit_rate)}</td>
-                      <td>{r.skipped ? "n/a" : fmt(r.in_scope_rate)}</td>
-                      <td>{s.checks[step]?.items_missing.join(", ") || "none"}</td>
+              <div className="matrix-scroll">
+                <table className="matrix">
+                  <thead>
+                    <tr>
+                      <th className="row-label">Step</th>
+                      <th>Samples</th>
+                      <th>Self-hit rate</th>
+                      <th>In-scope rate</th>
+                      <th>Missing scope items</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {Object.entries(s.steps).map(([step, r]) => (
+                      <tr key={step}>
+                        <td className="row-label">{EVAL_STEP_LABELS[step] ?? step}</td>
+                        <td>{r.skipped ? "skipped" : r.samples}</td>
+                        <td>{r.skipped ? "n/a" : fmt(r.retrieval_hit_rate)}</td>
+                        <td>{r.skipped ? "n/a" : fmt(r.in_scope_rate)}</td>
+                        <td>{s.checks[step]?.items_missing.join(", ") || "none"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
         </section>
       )}
-    </article>
+    </div>
   );
 }
