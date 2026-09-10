@@ -1,136 +1,146 @@
-# FinancialAnalyst , RAG Project
+<div align="center">
+  <img src="docs/brandmark.svg" alt="ThetaRadar" width="72" height="72" />
+  <h1>ThetaRadar</h1>
+  <p><em>Turn a company's own SEC filings into a source-grounded, six-step investment dossier.</em></p>
+</div>
 
-A **Retrieval-Augmented Generation (RAG)** pipeline built with [LlamaIndex](https://github.com/run-llama/llama_index) that enables an LLM agent to intelligently query and analyse financial documents. The agent supports both **vector search** and **summary-based retrieval**, with page-level metadata filtering and evaluated performance metrics.
+**ThetaRadar** ([thetaradar.me](https://thetaradar.me)) is a public web app for retail investors. You enter a US-listed ticker, it downloads the company's recent 10-K filings from SEC EDGAR, parses and indexes them, then walks a fixed six-step fundamental-analysis dossier — **One-pager → Business & SWOT → Financials → Strategy → Valuation → Thesis**. Every corpus-drafted claim carries page-level source tags. The retrieval engine is a hand-built hybrid RAG system whose quality is measured per configuration and published in [Metrics](#metrics).
 
----
+> [!NOTE]
+> The project ingests **10-K** filings today. The downloader scaffolds 10-Q counts, but quarterly ingestion is not yet enabled.
 
-## PROJECT STRUCTURE
+## Features
 
-| File | Purpose |
+- **Six-step Coffin-method dossier** per ticker, ending in a thesis the user can save to their library.
+- **Gated workflow** — nothing past Step 1 opens until the one-pager gate is accepted; Valuation and Thesis wait on the user's done-marks for Steps 2–4. Locked steps stay visible, never hidden.
+- **Grounded drafting** — Steps 2–4 and 6 are drafted over a *scoped corpus* (Step 2 over Item 1/1A, Step 3 over Item 7/8, Step 4 over Item 5/7) and every section is validated against its sources before it is shown.
+- **Hybrid retrieval** — dense (embedding) + BM25 keyword search fused by reciprocal-rank fusion, with an optional cross-encoder reranker.
+- **Numbers layer** — XBRL statements parsed from EDGAR, with common-size tables, ratios, CAGR, and a price override.
+- **Step-scoped chat** over the corpus for Steps 2–4, plus a "search everything" mode.
+- **Accounts & quotas** — email + password, bearer tokens, verified/unverified tiers, and daily per-user limits on analyses and chat.
+- **Durable ingestion** — a job-poller worker runs ingest jobs from a shared SQLite queue so they survive API restarts.
+
+## How it works
+
+```
+SEC EDGAR ──▶ Downloader ──▶ Reader (Item sections) ──▶ Chunker ──▶ Embedder ──▶ Chroma
+                                                                       │
+   user query ──▶ ScopedRetriever ──▶ dense + BM25 ──▶ RRF ──▶ [reranker] ──▶ source-tagged chunks
+```
+
+**Ingestion.** `SECDownloader` pulls the latest filings; `SECHtmlReader` turns the primary HTML document into Item sections (splitting real sections from the table of contents and injecting page metadata); `chunk_documents` splits sections at paragraph boundaries; `CompanyIndex` embeds the nodes and writes a per-ticker Chroma collection, recording the embed-model identity used to build it.
+
+**Retrieval.** `ScopedRetriever` queries one company's collection with metadata filters (Item, fiscal year). The dense leg runs on the hosted embed model and the sparse leg runs BM25 over the same scoped corpus; `reciprocal_rank_fusion` merges them. A cross-encoder reranker can be layered on top via `RERANKER_MODEL`. A collection is only servable by the embed model whose name matches the one recorded at build time, so two same-dimension models can never silently share a vector space — a mismatch tells the operator to re-ingest.
+
+**Drafting.** `ArtifactGenerator` builds each dossier artifact from retrieved chunks and refuses to return a draft that fails source validation. See [`DESIGN.md`](DESIGN.md) for the full design language and [`docs/adr/`](docs/adr/) for decision records.
+
+## Tech stack
+
+| Layer | Choice |
 |---|---|
-| `api/main.py` | FastAPI entrypoint wiring the ingestion/steps endpoints |
-| `api/services.py` | Service singletons; builds the Cloudflare-hosted embed model |
-| `financial_analyst/steps/retrieval.py` | Scoped hybrid retrieval + `CloudflareEmbedding` embedder |
-| `financial_analyst/indexing/company_index.py` | Chroma collection lifecycle + embed-identity metadata |
-| `financial_analyst/evaluation/eval_utils.py` | Monkey-patched evaluation utilities (see P4/S4 below) |
-| `tests/test_llamaindex_agent.py` | Retrieval-quality eval harness (vector/hybrid/rerank) |
+| RAG orchestration | [LlamaIndex](https://github.com/run-llama/llama_index) |
+| Vector store | [ChromaDB](https://www.trychroma.com/) |
+| Embeddings | `Qwen/Qwen3-Embedding-0.6B` (1024-dim), hosted on [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) — no local embed model is loaded |
+| Lexical leg | `rank_bm25` (BM25) fused with dense results by RRF |
+| Reranker (optional) | `BAAI/bge-reranker-v2-m3` cross-encoder |
+| LLM | DeepSeek (`deepseek-v4-flash`) |
+| Document parsing | Custom `SECHtmlReader` built on `lxml` (Item-section splitting + page metadata) |
+| API | [FastAPI](https://fastapi.tiangolo.com/) + Uvicorn |
+| Frontend | React 18 + TypeScript + Vite |
+| Auth & state | SQLite (users, quotas, step state, jobs) + JSON stores |
+| Deployment | Caddy (HTTPS) + systemd on an Ubuntu VM |
 
----
+## Getting started
 
-## KNOWLEDGE
+### Prerequisites
 
-This project was my deep-dive into building a production-ready RAG system. Beyond connecting an LLM to documents, I ran into several non-trivial problems around parsing, storage, metadata, evaluation correctness, and metric reliability. Each section below documents a real issue encountered and how it was resolved. This project also represents my current coding capabilities due to my minimized use of AI to solve problems (The RAG pipeline is implemented by hand while AI is used to generate the frontend/API).
+- Python 3.11+
+- Node.js 18+ and npm
+- A [DeepSeek API key](https://platform.deepseek.com/)
+- A [Cloudflare account](https://dash.cloudflare.com/) with Workers AI enabled (`CLOUDFLARE_ACCOUNT_ID` and an API token)
 
----
+### 1. Install
 
-## PROBLEMS AND SOLUTIONS
+```bash
+git clone https://github.com/warlord200/ThetaRadar.git
+cd ThetaRadar
 
-### P1 , LLM Tool Calling Fails with `SimpleDirectoryReader`
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
-**Problem:** The LLM agent was unable to invoke tools because the tool layer could not correctly parse documents loaded via LlamaIndex's built-in `SimpleDirectoryReader`. The raw output wasn't structured in a way the tool pipeline could consume reliably.
-
-**Solution:** Replaced `SimpleDirectoryReader` with a dedicated parser. [LlamaParse](https://github.com/run-llama/llama_parse) was the natural candidate but it is a paid service. Instead, **[LiteParse](https://github.com/iamarunbrahma/litparse)** was chosen , it is open-source, fast, and produced clean structured output that the tool layer could parse without errors.
-
----
-
-### P2 , `SummaryIndex` Cannot Be Persisted to ChromaDB
-
-**Problem:** After integrating ChromaDB as the vector store, `VectorStoreIndex` persisted correctly but `SummaryIndex` consistently failed.
-
-**Root cause:** ChromaDB is designed exclusively to store **vector embeddings**. `SummaryIndex` operates on raw nodes , it does not produce embeddings and therefore has nothing ChromaDB can store.
-
-**Solution:** Keep `VectorStoreIndex` backed by ChromaDB, and persist `SummaryIndex` using LlamaIndex's native `StorageContext` to a **separate local directory** (not the default `chroma_db` path). ChromaDB **auto-persists** to disk by default , calling `.persist()` manually is unnecessary.
-
-```python
-# SummaryIndex → separate StorageContext directory
-storage_context_summary = StorageContext.from_defaults(persist_dir="./storage_summary")
+npm --prefix web ci
 ```
 
----
+### 2. Configure
 
-### P3 , Metadata Filtering by Page Does Not Work
+Create a `.env` file at the repo root (see [`deploy/.env.example`](deploy/.env.example)):
 
-**Problem:** Page-level filtering returned incorrect or empty results even though documents were loaded successfully.
+```dotenv
+# LLM backend
+DEEPSEEK_API_KEY=
 
-**Root cause:** LiteParse does **not** automatically inject `page_label` into node metadata. This must be **explicitly defined** during `load_data`.
+# Embedding backend (Cloudflare Workers AI)
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
 
-**Solution:** Manually define the `load_data` method to inject page metadata, and add a helper that checks whether a collection already has `page_label` populated before filtering , preventing silent failures.
+# Ingest execution: "thread" for local dev, "worker" in production
+JOB_RUNNER=thread
 
-```python
-doc.metadata["page_label"] = str(page_number)
+# Optional
+# RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+# EMBED_BATCH_SIZE=32
+# QUOTA_ANALYSES_VERIFIED=3
+# QUOTA_ANALYSES_UNVERIFIED=1
+# QUOTA_CHAT_VERIFIED=30
+# QUOTA_CHAT_UNVERIFIED=10
 ```
 
----
+### 3. Run
 
-### P4 , Evaluation Docs Are Outdated; Functions Were Removed
+```bash
+# Terminal 1 — API on http://localhost:8000
+uvicorn api.main:app --reload
 
-**Problem:** Much of the official LlamaIndex evaluation documentation references `llama-index-finetuning`, which was **deprecated in April 2026**. Functions like `generate_qa_embedding_pairs` and `evaluate_dataset` were either moved into `llama_index.core.eval` in an incomplete state or removed entirely without explanation.
-
-**Solution:** Manually re-implemented the missing functions in `eval_utils.py`. Since the LlamaIndex source code cannot be modified directly, **monkey patching** was used to inject the corrected implementations at runtime.
-
-```python
-# eval_utils.py , monkey patching missing evaluate_dataset
-import llama_index.core.evaluation as _eval
-
-_eval.evaluate_dataset = custom_evaluate_dataset
+# Terminal 2 — web app on http://localhost:5173 (proxies /api to :8000)
+npm --prefix web run dev
 ```
 
----
+With `JOB_RUNNER=worker`, run the ingest worker in a third terminal:
 
-### P5 , All Evaluation Metrics Return Zero
-
-**Problem:** Every metric (faithfulness, relevancy, etc.) returned `0.0` regardless of query quality.
-
-**Root cause:** Nodes used in `generate_qa_embedding_pairs` are **randomly initialised** by default. The evaluation function tracks nodes by identity, so runtime-generated nodes don't match the nodes used during retrieval , causing a complete mismatch that zeros out all scores.
-
-**Solution:** Nodes must be **explicitly passed** every time `generate_qa_embedding_pairs` is called.
-
-```python
-qa_dataset = generate_qa_embedding_pairs(
-    nodes=my_defined_nodes,  # ← must not be random/default
-    llm=llm,
-)
+```bash
+python -m api.worker
 ```
 
----
+> [!TIP]
+> Open http://localhost:5173, sign up, then ingest a ticker (for example `MSFT`). Ingest jobs run in the background; the API exposes job status at `/api/ingest/jobs/{job_id}`.
 
-## TECH STACK
+## Testing
 
-- **LlamaIndex** , RAG orchestration, agent, and index management
-- **LiteParse** , Open-source document parser
-- **ChromaDB** , Vector store for `VectorStoreIndex`
-- **Qwen/Qwen3-Embedding-0.6B on Cloudflare Workers AI** , the single embed model (1024-dim), hosted — no local model is loaded for embedding
-- **rank_bm25** , lexical BM25 leg of hybrid retrieval (fused by reciprocal rank)
-- **bge-reranker-v2-m3** , optional cross-encoder reranker over fused candidates
-- **Deepseek / LLM** , Language model backend
+```bash
+# Python — unit and API tests (offline; mocked embedders)
+pytest
 
----
-
-## NOTES
-
-This project prioritises correctness and honest documentation of engineering challenges. `eval_utils.py` contains all monkey-patched workarounds with inline comments explaining why each exists. Issues with upstream libraries are noted with version references where applicable.
-
-Retrieval is **hybrid by default** (`ScopedRetriever` in `financial_analyst/steps/retrieval.py`): a dense (embedding) leg and a BM25 keyword leg over the same scoped corpus are fused with reciprocal rank fusion (RRF). A cross-encoder reranker can be layered on top by setting `RERANKER_MODEL` (e.g. `BAAI/bge-reranker-v2-m3`); unset means no reranking. The measured effect of each stage is below.
-
-## METRICS
-
-Historical baselines (prior harness, embed model **Octen/Octen-Embedding-4B-INT8** on GPU, `top_k=4`):
-
-```
-19/7/2026 | MRR: 0.589 | HIT_RATE: 0.676
-23/7/2026 | MRR: 0.767 | HIT_RATE: 0.851
+# Frontend — Vitest
+npm --prefix web test
 ```
 
-Intermediate re-measurement (2/9/2026) with **BAAI/bge-small-en-v1.5** (CPU, same harness, same QA corpora) as the interim CPU-capable model while Octen was being replaced. Not directly comparable to the GPU baselines — weaker embed model.
+## Evaluation & metrics
 
-| config | corpus | queries | MRR | hit_rate | ndcg |
-|---|---|---|---|---|---|
-| vector | Microsoft | 168 | 0.676 | 0.804 | 0.708 |
-| hybrid | Microsoft | 168 | 0.725 | 0.899 | 0.769 |
-| vector | Tesla | 163 | 0.713 | 0.840 | 0.745 |
-| hybrid | Tesla | 163 | 0.785 | 0.914 | 0.818 |
+The eval harness (`financial_analyst.evaluation.cli`) measures retrieval quality and writes the dashboard snapshot served at `/api/eval/summary`:
 
-Current measurement (4/9/2026) with the production embed model **Qwen/Qwen3-Embedding-0.6B served by Cloudflare Workers AI**, `top_k=4`. Same harness, same QA corpora. Embedding via Cloudflare produces vectors numerically identical to the local model (cosine 1.0000 checked on real AAPL chunks), so these are the Qwen3 numbers. Full corpora:
+```bash
+python -m financial_analyst.evaluation.cli curated              # hand-curated Tesla analyst benchmark
+python -m financial_analyst.evaluation.cli regression           # synthetic sets vs. recorded baselines
+python -m financial_analyst.evaluation.cli smoke --ticker AAPL  # per-company coverage + self-retrieval gate
+```
+
+The heavy modes need Cloudflare credentials and network access; the offline pytest suite covers every scoring path with mocked embedders. Regressions are reported when a metric falls more than `--tolerance` (default `0.02`) below its baseline.
+
+### Metrics
+
+Current measurement (4/9/2026) with the production embed model **Qwen/Qwen3-Embedding-0.6B on Cloudflare Workers AI**, `top_k=4`:
 
 | config | corpus | queries | MRR | hit_rate | ndcg |
 |---|---|---|---|---|---|
@@ -141,15 +151,70 @@ Current measurement (4/9/2026) with the production embed model **Qwen/Qwen3-Embe
 
 Aggregate over both corpora (weighted by query count): vector **0.794 MRR / 0.937 hit / 0.830 NDCG**; hybrid **0.802 MRR / 0.940 hit / 0.837 NDCG**.
 
-Matched 40-query subset per corpus (seeded), hybrid vs reranked hybrid, same Qwen3/Cloudflare corpus:
+Matched 40-query subset per corpus (seeded), hybrid vs. reranked hybrid:
 
 | config | queries | MRR | hit_rate | ndcg |
 |---|---|---|---|---|
 | hybrid | 80 | 0.802 | 0.913 | 0.830 |
 | hybrid + rerank | 80 | 0.856 | 0.913 | 0.871 |
 
-**Query-prefix head-to-head (4/9/2026).** Qwen3 wants an `Instruct:...\nQuery:` prompt on queries; Cloudflare does not add it, so the embedder prepends it. Qwen's documented default ("Given a web search query…") was measured against a domain-tuned variant ("Given a question about a company's SEC filings…"). On the full 331-query corpora the documented default matched or beat the variant: vector **MRR 0.794 vs 0.786 / NDCG 0.830 vs 0.826**; hybrid **NDCG 0.837 vs 0.836** (hybrid MRR tied). On the smaller matched 80-query subset the variant edged ahead (hybrid MRR 0.822 vs 0.802; hybrid+rerank MRR 0.859 vs 0.856), but the full-corpus comparison is the larger, more reliable sample. **Decision: keep Qwen's documented default** as `EMBED_QUERY_INSTRUCTION`.
+**Read on these numbers.** Moving from the interim `bge-small-en-v1.5` to Qwen3/Cloudflare improved every config (vector MRR +0.08–0.12, hybrid +0.03–0.07), and corpus re-ingest dropped from ~19–20 min of CPU embedding to ~1 min on the free Cloudflare tier. Hybrid (dense + BM25/RRF) wins on Tesla (+0.048 MRR) and never loses on hit rate; on Microsoft the dense-only leg has the higher MRR/NDCG, so the small aggregate hybrid edge comes from Tesla. Adding the reranker on top of hybrid is a clear gain on the matched subset: **+0.054 MRR, +0.041 NDCG**.
 
-**Read on these numbers.** Moving from the interim bge-small to Qwen3/Cloudflare improves every config (vector MRR +0.08–0.12, hybrid +0.03–0.07), and the corpus re-ingest dropped from ~19–20 min of CPU embedding to ~1 min on the free Cloudflare tier. Hybrid (dense + BM25/RRF) still wins on Tesla (+0.048 MRR) and never loses on hit rate, but on Microsoft the dense-only leg now has the higher MRR/NDCG (0.785/0.819 vs 0.754/0.799) — the small aggregate edge for hybrid comes from Tesla. On the matched 80-query subset, adding the reranker on top of hybrid is again a clear gain: **+0.054 MRR, +0.041 NDCG**.
+**Decisions.** Hybrid stays the default (it wins overall and on hit rate). The reranker stays behind `RERANKER_MODEL` rather than forced on, because it adds a ~2.3 GB cross-encoder and ~1 s/query on CPU. Qwen's documented default query instruction is kept over a domain-tuned variant, which lost on the full 331-query corpora.
 
-**Decision: hybrid stays the default** (it wins overall and on hit rate), with the Microsoft dense-vs-hybrid MRR inversion noted as a corpus-specific caveat. **The reranker stays behind `RERANKER_MODEL`** rather than forced on: it adds a ~2.3 GB cross-encoder and ~1 s/query on CPU. Embedding no longer holds a ~1.2 GB model resident (it is hosted), so a host that enables the reranker only needs memory for the reranker itself. (Latency note: hybrid adds a per-scope BM25 index that is built on the first query in that scope and cached thereafter — the search-everything scope is the whole corpus — plus a keyword pass per query; this has not been latency-profiled.) A standardised comparison method replacing this manual harness is the T13 eval's job.
+<details>
+<summary>Earlier baselines (for continuity)</summary>
+
+Historical baselines (prior harness, embed model **Octen/Octen-Embedding-4B-INT8** on GPU, `top_k=4`):
+
+```
+19/7/2026 | MRR: 0.589 | HIT_RATE: 0.676
+23/7/2026 | MRR: 0.767 | HIT_RATE: 0.851
+```
+
+Interim re-measurement (2/9/2026) with **BAAI/bge-small-en-v1.5** (CPU, same harness and QA corpora), while Octen was being replaced:
+
+| config | corpus | queries | MRR | hit_rate | ndcg |
+|---|---|---|---|---|---|
+| vector | Microsoft | 168 | 0.676 | 0.804 | 0.708 |
+| hybrid | Microsoft | 168 | 0.725 | 0.899 | 0.769 |
+| vector | Tesla | 163 | 0.713 | 0.840 | 0.745 |
+| hybrid | Tesla | 163 | 0.785 | 0.914 | 0.818 |
+
+</details>
+
+## Deployment
+
+The app runs on a single always-on server: FastAPI and the ingest worker as systemd units, the built React app served by Caddy with automatic HTTPS, and SQLite/Chroma on the persistent disk. The target is a free-tier Azure for Students VM (~1 GiB RAM, swap-enabled). See [`deploy/README.md`](deploy/README.md) for the full runbook.
+
+```bash
+# On the VM, with .env in place and JOB_RUNNER=worker
+sudo DOMAIN=your-hostname ./deploy/setup.sh
+```
+
+## Project layout
+
+| Path | Purpose |
+|---|---|
+| `api/` | FastAPI app (`main.py`), service singletons (`services.py`), ingest worker (`worker.py`) |
+| `financial_analyst/ingestion/` | SEC EDGAR downloader and file reader |
+| `financial_analyst/reader/` | HTML → Item sections (`sec_html_reader.py`), parsing, chunking |
+| `financial_analyst/indexing/` | Chroma collection lifecycle and embed-identity metadata |
+| `financial_analyst/steps/` | Retrieval, dossier step services, generation, chat, state |
+| `financial_analyst/numbers/` | XBRL statements, prices, numbers service |
+| `financial_analyst/auth/` | Users, tokens, sessions, quotas |
+| `financial_analyst/evaluation/` | Eval harness: metrics, benchmarks, regression, smoke, CLI |
+| `financial_analyst/storage/` | JSON and SQLite persistence helpers |
+| `web/` | React + TypeScript frontend |
+| `tests/` | Python test suite (mocked embedders, offline) |
+| `deploy/` | Caddyfile, systemd units, provisioning script |
+| `docs/adr/` | Architecture decision records |
+
+## Engineering notes
+
+A few non-obvious problems solved while building the pipeline — each is documented in code with inline comments:
+
+- **Parsing for tool calls.** LlamaIndex's `SimpleDirectoryReader` produced output the tool layer could not consume reliably; `SECHtmlReader` replaced it, splitting filings into real Item sections (discarding the table-of-contents duplicates) and injecting page metadata explicitly.
+- **Summary index persistence.** ChromaDB only stores vectors, so the `SummaryIndex` is persisted separately via LlamaIndex's native `StorageContext` rather than in the vector store.
+- **Evaluation drift.** `llama-index-finetuning` was deprecated, so missing eval functions are re-implemented and monkey-patched in `eval_utils.py`; nodes must be passed explicitly to `generate_qa_embedding_pairs` or all metrics return zero.
+- **Embed-model identity.** Corpus identity is keyed to the recorded model name, not the vector dimension, so changing the embed model forces a re-ingest ([ADR-0001](docs/adr/0001-single-embed-model-qwen3.md)).
